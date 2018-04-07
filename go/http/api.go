@@ -83,6 +83,7 @@ func (this *HttpAPI) validateToken(r render.Render, req *http.Request) error {
 	err := errors.New("Invalid token")
 	r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 	return err
+
 }
 
 // Hostname provides information on this process
@@ -205,7 +206,7 @@ func (this *HttpAPI) DiskUsage(params martini.Params, r render.Render, req *http
 	}
 	path := req.URL.Query().Get("path")
 
-	output, err := osagent.DiskUsage(path)
+	output, err := osagent.DirectorySize(path)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -218,9 +219,9 @@ func (this *HttpAPI) MySQLDiskUsage(params martini.Params, r render.Render, req 
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	datadir, err := osagent.GetMySQLDataDir()
+	datadir := config.Config.MySQLDataDir
 
-	output, err := osagent.DiskUsage(datadir)
+	output, err := osagent.DirectorySize(datadir)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -285,12 +286,7 @@ func (this *HttpAPI) MySQLPort(params martini.Params, r render.Render, req *http
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := osagent.GetMySQLPort()
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
+	r.JSON(200, config.Config.MySQLPort)
 }
 
 // MySQLRunning checks whether the MySQL service is up

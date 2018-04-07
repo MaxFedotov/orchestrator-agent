@@ -17,15 +17,19 @@
 package osagent
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/inst"
@@ -47,28 +51,9 @@ type LogicalVolume struct {
 	SnapshotPercent float64
 }
 
-func GetMySQLDataDir() (string, error) {
-	command := config.Config.MySQLDatadirCommand
-	output, err := commandOutput(command)
-	return strings.TrimSpace(fmt.Sprintf("%s", output)), err
-}
-
-func GetMySQLPort() (int64, error) {
-	command := config.Config.MySQLPortCommand
-	output, err := commandOutput(command)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseInt(strings.TrimSpace(fmt.Sprintf("%s", output)), 10, 0)
-}
-
 // GetRelayLogIndexFileName attempts to find the relay log index file under the mysql datadir
 func GetRelayLogIndexFileName() (string, error) {
-	directory, err := GetMySQLDataDir()
-	if err != nil {
-		return "", log.Errore(err)
-	}
-
+	directory := config.Config.MySQLDataDir
 	output, err := commandOutput(fmt.Sprintf("ls %s/*relay*.index", directory))
 	if err != nil {
 		return "", log.Errore(err)
@@ -254,6 +239,12 @@ type Mount struct {
 	MySQLDiskUsage int64
 }
 
+type DiskStats struct {
+	Total int64
+	Free  int64
+	Used  int64
+}
+
 func init() {
 	osPath := os.Getenv("PATH")
 	os.Setenv("PATH", fmt.Sprintf("%s:/usr/sbin:/usr/bin:/sbin:/bin", osPath))
@@ -403,9 +394,9 @@ func GetMount(mountPoint string) (Mount, error) {
 		mount.Path = lineTokens[1]
 		mount.FileSystem = lineTokens[2]
 		mount.LVPath, _ = GetLogicalVolumePath(mount.Device)
-		mount.DiskUsage, _ = DiskUsage(mountPoint)
+		mount.DiskUsage, _ = DiskUsed(mountPoint)
 		mount.MySQLDataPath, _ = HeuristicMySQLDataPath(mountPoint)
-		mount.MySQLDiskUsage, _ = DiskUsage(mount.MySQLDataPath)
+		mount.MySQLDiskUsage, _ = DirectorySize(mount.MySQLDataPath)
 	}
 	return mount, nil
 }
@@ -457,29 +448,47 @@ func Unmount(mountPoint string) (Mount, error) {
 	return GetMount(mountPoint)
 }
 
-func DiskUsage(path string) (int64, error) {
-	var result int64
-
-	output, err := commandOutput(sudoCmd(fmt.Sprintf("du -sb %s", path)))
-	tokens, err := outputTokens(`[ \t]+`, output, err)
+func GetDiskSpace(path string) (DiskStats, error) {
+	disk := DiskStats{}
+	fs := syscall.Statfs_t{}
+	err := syscall.Statfs(path, &fs)
 	if err != nil {
-		return result, err
+		return disk, err
 	}
+	disk.Total = int64(fs.Blocks) * int64(fs.Bsize)
+	disk.Free = int64(fs.Bavail) * int64(fs.Bsize)
+	disk.Used = disk.Total - disk.Free
 
-	for _, lineTokens := range tokens {
-		result, err = strconv.ParseInt(lineTokens[0], 10, 0)
-		return result, err
+	return disk, err
+}
+
+func DiskUsed(path string) (int64, error) {
+	du, err := GetDiskSpace(path)
+	return du.Used, err
+}
+
+func DiskFree(path string) (int64, error) {
+	du, err := GetDiskSpace(path)
+	return du.Free, err
+}
+
+func DirectorySize(path string) (int64, error) {
+	if path == "" {
+		return 0, errors.New("cannot calculate size of empty directory")
 	}
-	return result, err
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return err
+	})
+	return size, err
 }
 
 // DeleteMySQLDataDir self explanatory. Be responsible! This function does not verify the MySQL service is down
 func DeleteMySQLDataDir() error {
-
-	directory, err := GetMySQLDataDir()
-	if err != nil {
-		return err
-	}
+	directory := config.Config.MySQLDataDir
 
 	directory = strings.TrimSpace(directory)
 	if directory == "" {
@@ -488,33 +497,15 @@ func DeleteMySQLDataDir() error {
 	if path.Dir(directory) == directory {
 		return errors.New(fmt.Sprintf("Directory %s seems to be root; refusing to delete", directory))
 	}
-	_, err = commandOutput(config.Config.MySQLDeleteDatadirContentCommand)
+	_, err := commandOutput(config.Config.MySQLDeleteDatadirContentCommand)
 
 	return err
 }
 
 func GetMySQLDataDirAvailableDiskSpace() (int64, error) {
-	directory, err := GetMySQLDataDir()
-	if err != nil {
-		return 0, log.Errore(err)
-	}
-
-	output, err := commandOutput(fmt.Sprintf("df -PT -B 1 %s | sed -e /^Filesystem/d", directory))
-	if err != nil {
-		return 0, log.Errore(err)
-	}
-
-	if len(output) > 0 {
-		tokens, err := outputTokens(`[ \t]+`, output, err)
-		if err != nil {
-			return 0, log.Errore(err)
-		}
-		for _, lineTokens := range tokens {
-			result, err := strconv.ParseInt(lineTokens[4], 10, 0)
-			return result, err
-		}
-	}
-	return 0, log.Errore(errors.New(fmt.Sprintf("No rows found by df in GetMySQLDataDirAvailableDiskSpace, %s", directory)))
+	directory := config.Config.MySQLDataDir
+	diskSpace, err := DiskFree(directory)
+	return diskSpace, err
 }
 
 // PostCopy executes a post-copy command -- after LVM copy is done, before service starts. Some cleanup may go here.
@@ -524,10 +515,7 @@ func PostCopy() error {
 }
 
 func HeuristicMySQLDataPath(mountPoint string) (string, error) {
-	datadir, err := GetMySQLDataDir()
-	if err != nil {
-		return "", err
-	}
+	datadir := config.Config.MySQLDataDir
 
 	heuristicFileName := "ibdata1"
 
@@ -559,9 +547,50 @@ func AvailableSnapshots(requireLocal bool) ([]string, error) {
 }
 
 func MySQLErrorLogTail() ([]string, error) {
-	output, err := commandOutput(sudoCmd(`tail -n 20 $(egrep "log[-_]error" /etc/my.cnf | cut -d "=" -f 2)`))
-	tail, err := outputLines(output, err)
-	return tail, err
+	lines := 20
+	var bufsize int64 = 400
+	var result []string
+	var iter int64
+
+	file, err := os.Open(config.Config.MySQLErrorLog)
+	fstat, err := file.Stat()
+	defer file.Close()
+	if err != nil {
+		return nil, err
+	}
+	fsize := fstat.Size()
+	if bufsize > fsize {
+		bufsize = fsize
+	}
+	reader := bufio.NewReader(file)
+	for {
+		iter++
+		var data []string
+		offset := fsize - bufsize*iter
+		if offset < 0 {
+			offset = 0
+		}
+		currentPosition, _ := file.Seek(offset, 0)
+		for {
+			line, err := reader.ReadString('\n')
+			data = append(data, line)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+			}
+		}
+		data = data[:len(data)-1]
+		if len(data) >= lines || currentPosition == 0 {
+			if lines < len(data) {
+				result = data[len(data)-lines:]
+			} else {
+				result = data
+			}
+			break
+		}
+	}
+	return result, err
 }
 
 func MySQLRunning() (bool, error) {
@@ -581,12 +610,13 @@ func MySQLStart() error {
 }
 
 func ReceiveMySQLSeedData(seedId string) error {
-	directory, err := GetMySQLDataDir()
-	if err != nil {
-		return log.Errore(err)
+	directory := config.Config.MySQLDataDir
+
+	if directory == "" {
+		return log.Error("Empty directory in ReceiveMySQLSeedData")
 	}
 
-	err = commandRun(
+	err := commandRun(
 		fmt.Sprintf("%s %s %d", config.Config.ReceiveSeedDataCommand, directory, SeedTransferPort),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd

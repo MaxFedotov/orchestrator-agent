@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/outbrain/golib/log"
+	"github.com/zpatrick/go-config"
 )
 
 // Configuration makes for orchestrator-agent configuration input, which can be provided by user via JSON formatted file.
@@ -32,8 +33,6 @@ type Configuration struct {
 	AvailableLocalSnapshotHostsCommand string            // Command which returns list of hosts (one host per line) with available snapshots in local datacenter
 	AvailableSnapshotHostsCommand      string            // Command which returns list of hosts (one host per line) with available snapshots in any datacenter
 	SnapshotVolumesFilter              string            // text pattern filtering agent logical volumes that are valid snapshots
-	MySQLDatadirCommand                string            // command expected to present with @@datadir
-	MySQLPortCommand                   string            // command expected to present with @@port
 	MySQLDeleteDatadirContentCommand   string            // command which deletes all content from MySQL datadir (does not remvoe directory itself)
 	MySQLServiceStopCommand            string            // Command to stop mysql, e.g. /etc/init.d/mysql stop
 	MySQLServiceStartCommand           string            // Command to start mysql, e.g. /etc/init.d/mysql start
@@ -62,6 +61,9 @@ type Configuration struct {
 	CustomCommands                     map[string]string // Anything in this list of options will be exposed as an API callable options
 	TokenHintFile                      string            // If defined, token will be stored in this file
 	TokenHttpHeader                    string            // If defined, name of HTTP header where token is presented (as alternative to query param)
+	MySQLPort                          int               // Port on which mysqld is listening. Read from my.cnf
+	MySQLDataDir                       string            // Location of MySQL datadir. Read from my.cnf
+	MySQLErrorLog                      string            // Location of MySQL error log file. Read from my.cnf
 }
 
 var Config = NewConfiguration()
@@ -75,8 +77,6 @@ func NewConfiguration() *Configuration {
 		AvailableLocalSnapshotHostsCommand: "",
 		AvailableSnapshotHostsCommand:      "",
 		SnapshotVolumesFilter:              "",
-		MySQLDatadirCommand:                "",
-		MySQLPortCommand:                   "",
 		MySQLDeleteDatadirContentCommand:   "",
 		MySQLServiceStopCommand:            "",
 		MySQLServiceStartCommand:           "",
@@ -105,20 +105,44 @@ func NewConfiguration() *Configuration {
 		CustomCommands:                     make(map[string]string),
 		TokenHintFile:                      "",
 		TokenHttpHeader:                    "",
+		MySQLPort:                          3306,
+		MySQLDataDir:                       "",
+		MySQLErrorLog:                      "",
 	}
 }
 
 // read reads configuration from given file, or silently skips if the file does not exist.
 // If the file does exist, then it is expected to be in valid JSON format or the function bails out.
-func read(file_name string) (*Configuration, error) {
-	file, err := os.Open(file_name)
+func readJSON(fileName string) (*Configuration, error) {
+	file, err := os.Open(fileName)
 	if err == nil {
 		decoder := json.NewDecoder(file)
 		err := decoder.Decode(Config)
 		if err == nil {
-			log.Infof("Read config: %s", file_name)
+			log.Infof("Read config: %s", fileName)
 		} else {
-			log.Fatal("Cannot read config file:", file_name, err)
+			log.Fatal("Cannot read config file:", fileName, err)
+		}
+	}
+	return Config, err
+}
+
+// read reads configuration from given file, or silently skips if the file does not exist.
+// If the file does exist, then it is expected to be in valid INI format or the function bails out.
+func readINI(fileName string) (*Configuration, error) {
+	provider := config.NewINIFile(fileName)
+	c := config.NewConfig([]config.Provider{provider})
+	err := c.Load()
+	if err == nil {
+		var err error
+		if Config.MySQLPort, err = c.Int("mysqld.port"); err != nil {
+			log.Fatal("Cannot read port from config file:", fileName, err)
+		}
+		if Config.MySQLDataDir, err = c.String("mysqld.datadir"); err != nil {
+			log.Fatal("Cannot read datadir from config file:", fileName, err)
+		}
+		if Config.MySQLErrorLog, err = c.String("mysqld.log_error"); err != nil {
+			log.Fatal("Cannot read log_error from config file:", fileName, err)
 		}
 	}
 	return Config, err
@@ -126,18 +150,25 @@ func read(file_name string) (*Configuration, error) {
 
 // Read reads configuration from zero, either, some or all given files, in order of input.
 // A file can override configuration provided in previous file.
-func Read(file_names ...string) *Configuration {
-	for _, file_name := range file_names {
-		read(file_name)
+func Read(fileNames []string, configtype string) *Configuration {
+	if configtype == "appconfig" {
+		for _, fileName := range fileNames {
+			readJSON(fileName)
+		}
+	}
+	if configtype == "mysqlconfig" {
+		for _, fileName := range fileNames {
+			readINI(fileName)
+		}
 	}
 	return Config
 }
 
 // ForceRead reads configuration from given file name or bails out if it fails
-func ForceRead(file_name string) *Configuration {
-	_, err := read(file_name)
+func ForceRead(fileName string) *Configuration {
+	_, err := readJSON(fileName)
 	if err != nil {
-		log.Fatal("Cannot read config file:", file_name, err)
+		log.Fatal("Cannot read config file:", fileName, err)
 	}
 	return Config
 }
