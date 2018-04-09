@@ -84,6 +84,8 @@ func main() {
 		log.Errore(err)
 	}
 
+	go config.WatchConf()
+
 	go acceptSignal()
 
 	app.Http()

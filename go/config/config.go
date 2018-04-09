@@ -19,9 +19,11 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 
+	"github.com/fsnotify/fsnotify"
+	"github.com/go-ini/ini"
 	"github.com/outbrain/golib/log"
-	"github.com/zpatrick/go-config"
 )
 
 // Configuration makes for orchestrator-agent configuration input, which can be provided by user via JSON formatted file.
@@ -67,6 +69,7 @@ type Configuration struct {
 }
 
 var Config = NewConfiguration()
+var confFiles = make(map[string]struct{})
 
 func NewConfiguration() *Configuration {
 	return &Configuration{
@@ -120,6 +123,9 @@ func readJSON(fileName string) (*Configuration, error) {
 		err := decoder.Decode(Config)
 		if err == nil {
 			log.Infof("Read config: %s", fileName)
+			if _, ok := confFiles[fileName]; !ok {
+				confFiles[fileName] = struct{}{}
+			}
 		} else {
 			log.Fatal("Cannot read config file:", fileName, err)
 		}
@@ -130,19 +136,20 @@ func readJSON(fileName string) (*Configuration, error) {
 // read reads configuration from given file, or silently skips if the file does not exist.
 // If the file does exist, then it is expected to be in valid INI format or the function bails out.
 func readINI(fileName string) (*Configuration, error) {
-	provider := config.NewINIFile(fileName)
-	c := config.NewConfig([]config.Provider{provider})
-	err := c.Load()
+	cfg, err := ini.Load(fileName)
 	if err == nil {
 		var err error
-		if Config.MySQLPort, err = c.Int("mysqld.port"); err != nil {
+		if Config.MySQLPort, err = cfg.Section("mysqld").Key("port").Int(); err != nil {
 			log.Fatal("Cannot read port from config file:", fileName, err)
 		}
-		if Config.MySQLDataDir, err = c.String("mysqld.datadir"); err != nil {
-			log.Fatal("Cannot read datadir from config file:", fileName, err)
+		if Config.MySQLDataDir = cfg.Section("mysqld").Key("datadir").String(); len(Config.MySQLDataDir) == 0 {
+			log.Fatal("Cannot read datadir from config file:", fileName)
 		}
-		if Config.MySQLErrorLog, err = c.String("mysqld.log_error"); err != nil {
-			log.Fatal("Cannot read log_error from config file:", fileName, err)
+		if Config.MySQLErrorLog = cfg.Section("mysqld").Key("log_error").String(); len(Config.MySQLErrorLog) == 0 {
+			log.Fatal("Cannot read log_error from config file:", fileName)
+		}
+		if _, ok := confFiles[fileName]; !ok {
+			confFiles[fileName] = struct{}{}
 		}
 	}
 	return Config, err
@@ -171,4 +178,40 @@ func ForceRead(fileName string) *Configuration {
 		log.Fatal("Cannot read config file:", fileName, err)
 	}
 	return Config
+}
+
+// WatchConf watches for changes in configuration files and rereads them in case of change
+func WatchConf() {
+	watcher, err := fsnotify.NewWatcher()
+	if err == nil {
+		defer watcher.Close()
+		done := make(chan bool)
+		go func() {
+			for {
+				select {
+				case event := <-watcher.Events:
+					if event.Op&fsnotify.Write == fsnotify.Write {
+						if filepath.Base(event.Name) == "my.cnf" {
+							log.Infof("MySQL config file %s changed. Reloading", event.Name)
+							readINI(event.Name)
+						}
+						if filepath.Base(event.Name) == "orchestrator-agent.conf.json" {
+							log.Infof("Orchestrator agent config file %s changed. Reloading", event.Name)
+							readJSON(event.Name)
+						}
+					}
+				case err := <-watcher.Errors:
+					log.Errorf("Unable to reload config file %s", err)
+				}
+			}
+		}()
+
+		for key := range confFiles {
+			err = watcher.Add(key)
+			if err != nil {
+				log.Errorf("Unable to add watcher for config file %s. Error: %s", key, err)
+			}
+		}
+		<-done
+	}
 }
