@@ -39,6 +39,8 @@ type Configuration struct {
 	MySQLServiceStopCommand            string            // Command to stop mysql, e.g. /etc/init.d/mysql stop
 	MySQLServiceStartCommand           string            // Command to start mysql, e.g. /etc/init.d/mysql start
 	MySQLServiceStatusCommand          string            // Command to check mysql status. Expects 0 return value when running, non-zero when not running, e.g. /etc/init.d/mysql status
+	MySQLBackupDir                     string            // Path to directory on host where backup files will be stored
+	SeedPort                           int               // Port used for transfering backup data
 	ReceiveSeedDataCommand             string            // Accepts incoming data (e.g. tarball over netcat)
 	SendSeedDataCommand                string            // Sends date to remote host (e.g. tarball via netcat)
 	PostCopyCommand                    string            // command that is executed after seed is done and before MySQL starts
@@ -63,9 +65,16 @@ type Configuration struct {
 	CustomCommands                     map[string]string // Anything in this list of options will be exposed as an API callable options
 	TokenHintFile                      string            // If defined, token will be stored in this file
 	TokenHttpHeader                    string            // If defined, name of HTTP header where token is presented (as alternative to query param)
+	MySQLAgentUser                     string            // Username used by orchestrator agent to connect to MySQL
+	MySQLAgentPassword                 string            // Password for MySQL user used by orchestrator agent to connect to MySQL
 	MySQLPort                          int               // Port on which mysqld is listening. Read from my.cnf
 	MySQLDataDir                       string            // Location of MySQL datadir. Read from my.cnf
 	MySQLErrorLog                      string            // Location of MySQL error log file. Read from my.cnf
+	MySQLInnoDBLogDir                  string            // Location of ib_logfile. Read from my.cnf
+	XtrabackupParallelThreads          int               // Number of threads Xtrabackup will use to copy multiple data files concurrently when creating a backup
+	MyDumperParallelThreads            int               // Number of threads MyDumper\MyLoader will use for dumping and restoring data
+	MyDumperRowsChunkSize              int               // Split table into chunks of this many rows. 0 - unlimited
+	MyDumperCompress                   bool              // Compress output mydumper files
 }
 
 var Config = NewConfiguration()
@@ -84,6 +93,8 @@ func NewConfiguration() *Configuration {
 		MySQLServiceStopCommand:            "",
 		MySQLServiceStartCommand:           "",
 		MySQLServiceStatusCommand:          "",
+		MySQLBackupDir:                     "",
+		SeedPort:                           21234,
 		ReceiveSeedDataCommand:             "",
 		SendSeedDataCommand:                "",
 		PostCopyCommand:                    "",
@@ -108,9 +119,16 @@ func NewConfiguration() *Configuration {
 		CustomCommands:                     make(map[string]string),
 		TokenHintFile:                      "",
 		TokenHttpHeader:                    "",
+		MySQLAgentUser:                     "",
+		MySQLAgentPassword:                 "",
 		MySQLPort:                          3306,
 		MySQLDataDir:                       "",
 		MySQLErrorLog:                      "",
+		MySQLInnoDBLogDir:                  "",
+		XtrabackupParallelThreads:          1,
+		MyDumperParallelThreads:            1,
+		MyDumperRowsChunkSize:              0,
+		MyDumperCompress:                   true,
 	}
 }
 
@@ -148,6 +166,7 @@ func readINI(fileName string) (*Configuration, error) {
 		if Config.MySQLErrorLog = cfg.Section("mysqld").Key("log_error").String(); len(Config.MySQLErrorLog) == 0 {
 			log.Fatal("Cannot read log_error from config file:", fileName)
 		}
+		Config.MySQLInnoDBLogDir = cfg.Section("mysqld").Key("innodb_log_group_home_dir").String()
 		if _, ok := confFiles[fileName]; !ok {
 			confFiles[fileName] = struct{}{}
 		}

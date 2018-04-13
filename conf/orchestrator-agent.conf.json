@@ -26,5 +26,13 @@
     "CustomCommands": {
         "true": "/bin/true"
     },
-    "TokenHintFile": ""
+    "TokenHintFile": "",
+    "MySQLAgentUser": "orch-agent",
+    "MySQLAgentPassword": "orch-agent",
+    "MySQLBackupDir": "/tmp/bkp/",
+    "SeedPort": 21234,
+    "XtrabackupParallelThreads": 5,
+    "MyDumperParallelThreads": 4,
+    "MyDumperRowsChunkSize": 0,
+    "MyDumperCompress": true
 }

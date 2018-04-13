@@ -36,10 +36,6 @@ import (
 	"github.com/outbrain/golib/log"
 )
 
-const (
-	SeedTransferPort = 21234
-)
-
 var activeCommands = make(map[string]*exec.Cmd)
 
 // LogicalVolume describes an LVM volume
@@ -617,7 +613,7 @@ func ReceiveMySQLSeedData(seedId string) error {
 	}
 
 	err := commandRun(
-		fmt.Sprintf("%s %s %d", config.Config.ReceiveSeedDataCommand, directory, SeedTransferPort),
+		fmt.Sprintf("%s %s %d", config.Config.ReceiveSeedDataCommand, directory, config.Config.SeedPort),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
 			log.Debug("ReceiveMySQLSeedData command completed")
@@ -633,7 +629,7 @@ func SendMySQLSeedData(targetHostname string, directory string, seedId string) e
 	if directory == "" {
 		return log.Error("Empty directory in SendMySQLSeedData")
 	}
-	err := commandRun(fmt.Sprintf("%s %s %s %d", config.Config.SendSeedDataCommand, directory, targetHostname, SeedTransferPort),
+	err := commandRun(fmt.Sprintf("%s %s %s %d", config.Config.SendSeedDataCommand, directory, targetHostname, config.Config.SeedPort),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
 			log.Debug("SendMySQLSeedData command completed")
