@@ -333,7 +333,19 @@ func (this *HttpAPI) DeleteMySQLDataDir(params martini.Params, r render.Render, 
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.DeleteMySQLDataDir()
+	err := osagent.DeleteDirContents(config.Config.MySQLDataDir)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
+func (this *HttpAPI) DeleteMySQLBackupDir(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	err := osagent.DeleteDirContents(config.Config.MySQLBackupDir)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -611,6 +623,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/mysql-stop", this.MySQLStop)
 	m.Get("/api/mysql-start", this.MySQLStart)
 	m.Get("/api/delete-mysql-datadir", this.DeleteMySQLDataDir)
+	m.Get("/api/delete-mysql-backupdir", this.DeleteMySQLBackupDir)
 	m.Get("/api/mysql-datadir-available-space", this.GetMySQLDataDirAvailableDiskSpace)
 	m.Get("/api/post-copy", this.PostCopy)
 	m.Get("/api/receive-mysql-seed-data/:seedId", this.ReceiveMySQLSeedData)

@@ -8,7 +8,6 @@
     "AvailableLocalSnapshotHostsCommand": "echo 1",
     "AvailableSnapshotHostsCommand": "echo 1",
     "SnapshotVolumesFilter": "-my-snapshot-",
-    "MySQLDeleteDatadirContentCommand": "echo 'will not do'",
     "MySQLServiceStopCommand":      "service mysqld stop",
     "MySQLServiceStartCommand":     "service mysqld start",
     "MySQLServiceStatusCommand":    "service mysqld status",

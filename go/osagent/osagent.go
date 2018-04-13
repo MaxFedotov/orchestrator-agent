@@ -482,20 +482,24 @@ func DirectorySize(path string) (int64, error) {
 	return size, err
 }
 
-// DeleteMySQLDataDir self explanatory. Be responsible! This function does not verify the MySQL service is down
-func DeleteMySQLDataDir() error {
-	directory := config.Config.MySQLDataDir
-
-	directory = strings.TrimSpace(directory)
-	if directory == "" {
-		return errors.New("refusing to delete empty directory")
+// DeleteDirContents deletes all contens on underlying path
+func DeleteDirContents(path string) error {
+	dir, err := os.Open(path)
+	if err != nil {
+		return err
 	}
-	if path.Dir(directory) == directory {
-		return errors.New(fmt.Sprintf("Directory %s seems to be root; refusing to delete", directory))
+	defer dir.Close()
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return err
 	}
-	_, err := commandOutput(config.Config.MySQLDeleteDatadirContentCommand)
-
-	return err
+	for _, name := range names {
+		err = os.RemoveAll(filepath.Join(path, name))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func GetMySQLDataDirAvailableDiskSpace() (int64, error) {
