@@ -379,6 +379,15 @@ func (this *HttpAPI) GetMySQLBackupDirAvailableDiskSpace(params martini.Params, 
 	r.JSON(200, output)
 }
 
+// GetAvailableSeedMethods returns the available seed methods for host (LVM, xtrabackup, xtrabackup-stream, mydumper and mysqldump)
+func (this *HttpAPI) GetAvailableSeedMethods(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	output := osagent.GetAvailableSeedMethods()
+	r.JSON(200, output)
+}
+
 // PostCopy
 func (this *HttpAPI) PostCopy(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
@@ -639,6 +648,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/delete-mysql-backupdir", this.DeleteMySQLBackupDir)
 	m.Get("/api/mysql-datadir-available-space", this.GetMySQLDataDirAvailableDiskSpace)
 	m.Get("/api/mysql-backupdir-available-space", this.GetMySQLBackupDirAvailableDiskSpace)
+	m.Get("/api/available-seed-methods", this.GetAvailableSeedMethods)
 	m.Get("/api/post-copy", this.PostCopy)
 	m.Get("/api/receive-mysql-seed-data/:seedId", this.ReceiveMySQLSeedData)
 	m.Get("/api/send-mysql-seed-data/:targetHost/:seedId", this.SendMySQLSeedData)

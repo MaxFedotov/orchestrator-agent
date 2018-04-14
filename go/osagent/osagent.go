@@ -37,6 +37,7 @@ import (
 )
 
 var activeCommands = make(map[string]*exec.Cmd)
+var seedMethods = [5]string{"xtrabackup", "xtrabackup-stream", "lvm", "mydumper", "mysqldump"}
 
 // LogicalVolume describes an LVM volume
 type LogicalVolume struct {
@@ -601,6 +602,32 @@ func MySQLStop() error {
 func MySQLStart() error {
 	_, err := commandOutput(config.Config.MySQLServiceStartCommand)
 	return err
+}
+
+func GetAvailableSeedMethods() []string {
+	var avaliableSeedMethods []string
+	var cmd string
+
+	for _, seedMethod := range seedMethods {
+		switch seedMethod {
+		case "lvm":
+			cmd = "lvs"
+		case "xtrabackup-stream":
+			cmd = "xtrabackup"
+		default:
+			cmd = seedMethod
+		}
+		err := commandRun(
+			fmt.Sprintf("%s --version", cmd),
+			func(cmd *exec.Cmd) {
+				log.Debug("Checking for seed method", seedMethod)
+			})
+		if err == nil {
+			log.Debug("seed method", seedMethod, "found")
+			avaliableSeedMethods = append(avaliableSeedMethods, seedMethod)
+		}
+	}
+	return avaliableSeedMethods
 }
 
 func ReceiveMySQLSeedData(seedId string) error {
