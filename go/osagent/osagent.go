@@ -502,12 +502,6 @@ func DeleteDirContents(path string) error {
 	return nil
 }
 
-func GetMySQLDataDirAvailableDiskSpace() (int64, error) {
-	directory := config.Config.MySQLDataDir
-	diskSpace, err := DiskFree(directory)
-	return diskSpace, err
-}
-
 // PostCopy executes a post-copy command -- after LVM copy is done, before service starts. Some cleanup may go here.
 func PostCopy() error {
 	_, err := commandOutput(config.Config.PostCopyCommand)

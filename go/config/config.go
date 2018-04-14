@@ -152,22 +152,27 @@ func readJSON(fileName string) (*Configuration, error) {
 // read reads configuration from given file, or silently skips if the file does not exist.
 // If the file does exist, then it is expected to be in valid INI format or the function bails out.
 func readINI(fileName string) (*Configuration, error) {
-	cfg, err := ini.Load(fileName)
+	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, fileName)
 	if err == nil {
-		var err error
-		if Config.MySQLPort, err = cfg.Section("mysqld").Key("port").Int(); err != nil {
+		sec := cfg.Section("mysqld")
+		if !sec.HasKey("port") {
 			log.Fatal("Cannot read port from config file:", fileName, err)
 		}
-		if Config.MySQLDataDir = cfg.Section("mysqld").Key("datadir").String(); len(Config.MySQLDataDir) == 0 {
+		if !sec.HasKey("datadir") {
 			log.Fatal("Cannot read datadir from config file:", fileName)
 		}
-		if Config.MySQLErrorLog = cfg.Section("mysqld").Key("log_error").String(); len(Config.MySQLErrorLog) == 0 {
-			log.Fatal("Cannot read log_error from config file:", fileName)
+		if sec.Haskey("log-error") {
+			Config.MySQLErrorLog = sec.Key("log-error").String()
+		} else {
+			Config.MySQLErrorLog = sec.Key("log_error").String()
 		}
-		Config.MySQLInnoDBLogDir = cfg.Section("mysqld").Key("innodb_log_group_home_dir").String()
+		Config.MySQLPort, _ = sec.Key("port").Int()
+		Config.MySQLDataDir = sec.Key("datadir").String()
+		Config.MySQLInnoDBLogDir = sec.Key("innodb_log_group_home_dir").String()
 		if _, ok := confFiles[fileName]; !ok {
 			confFiles[fileName] = struct{}{}
 		}
+		log.Infof("Read config: %s", fileName)
 	}
 	return Config, err
 }

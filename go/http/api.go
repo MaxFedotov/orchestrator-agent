@@ -358,7 +358,20 @@ func (this *HttpAPI) GetMySQLDataDirAvailableDiskSpace(params martini.Params, r 
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := osagent.GetMySQLDataDirAvailableDiskSpace()
+	output, err := osagent.DiskFree(config.Config.MySQLDataDir)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, output)
+}
+
+// GetMySQLBackupDirAvailableDiskSpace returns the number of bytes free within the MySQL backup directory mount
+func (this *HttpAPI) GetMySQLBackupDirAvailableDiskSpace(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	output, err := osagent.DiskFree(config.Config.MySQLBackupDir)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -625,6 +638,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/delete-mysql-datadir", this.DeleteMySQLDataDir)
 	m.Get("/api/delete-mysql-backupdir", this.DeleteMySQLBackupDir)
 	m.Get("/api/mysql-datadir-available-space", this.GetMySQLDataDirAvailableDiskSpace)
+	m.Get("/api/mysql-backupdir-available-space", this.GetMySQLBackupDirAvailableDiskSpace)
 	m.Get("/api/post-copy", this.PostCopy)
 	m.Get("/api/receive-mysql-seed-data/:seedId", this.ReceiveMySQLSeedData)
 	m.Get("/api/send-mysql-seed-data/:targetHost/:seedId", this.SendMySQLSeedData)
