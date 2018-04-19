@@ -21,7 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"github.com/outbrain/golib/log"
+	"github.com/openark/golib/log"
 )
 
 func GetHash(input []byte) string {

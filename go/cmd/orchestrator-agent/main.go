@@ -26,7 +26,7 @@ import (
 	"github.com/github/orchestrator-agent/go/agent"
 	"github.com/github/orchestrator-agent/go/app"
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/outbrain/golib/log"
+	"github.com/openark/golib/log"
 )
 
 var AppVersion string

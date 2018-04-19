@@ -26,7 +26,7 @@ import (
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/osagent"
 	"github.com/github/orchestrator-agent/go/ssl"
-	"github.com/outbrain/golib/log"
+	"github.com/openark/golib/log"
 )
 
 var httpTimeout = time.Duration(time.Duration(config.Config.HttpTimeoutSeconds) * time.Second)

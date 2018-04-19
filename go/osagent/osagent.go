@@ -33,7 +33,7 @@ import (
 
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/inst"
-	"github.com/outbrain/golib/log"
+	"github.com/openark/golib/log"
 )
 
 var activeCommands = make(map[string]*exec.Cmd)

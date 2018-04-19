@@ -26,8 +26,8 @@
         "true": "/bin/true"
     },
     "TokenHintFile": "",
-    "MySQLAgentUser": "orch-agent",
-    "MySQLAgentPassword": "orch-agent",
+    "MySQLTopologyUser": "orc_client_user",
+    "MySQLTopologyPassword": "orc_client_user",
     "MySQLBackupDir": "/tmp/bkp/",
     "SeedPort": 21234,
     "XtrabackupParallelThreads": 5,
