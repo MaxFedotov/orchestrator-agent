@@ -18,6 +18,7 @@ package osagent
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -30,14 +31,16 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/github/orchestrator-agent/go/config"
+	"github.com/github/orchestrator-agent/go/dbagent"
 	"github.com/github/orchestrator-agent/go/inst"
 	"github.com/openark/golib/log"
 )
 
 var activeCommands = make(map[string]*exec.Cmd)
-var seedMethods = [5]string{"xtrabackup", "xtrabackup-stream", "lvm", "mydumper", "mysqldump"}
+var seedMethods = []string{"xtrabackup", "xtrabackup-stream", "lvm", "mydumper", "mysqldump"}
 
 // LogicalVolume describes an LVM volume
 type LogicalVolume struct {
@@ -46,6 +49,19 @@ type LogicalVolume struct {
 	Path            string
 	IsSnapshot      bool
 	SnapshotPercent float64
+}
+
+// MySQLDatabaseInfo provides information about MySQL databases, engines and sizes
+type MySQLDatabaseInfo struct {
+	MySQLDatabases map[string]*MySQLDatabase
+	InnoDBLogSize  int64
+}
+
+// MySQLDatabase info provides information about MySQL databases, engines and sizes
+type MySQLDatabase struct {
+	Engines      []string
+	PhysicalSize int64
+	LogicalSize  int64
 }
 
 // GetRelayLogIndexFileName attempts to find the relay log index file under the mysql datadir
@@ -290,7 +306,9 @@ func commandOutput(commandText string) ([]byte, error) {
 
 // commandRun executes a command
 func commandRun(commandText string, onCommand func(*exec.Cmd)) error {
+	var stderr bytes.Buffer
 	cmd, tmpFileName, err := execCmd(commandText)
+	cmd.Stderr = &stderr
 	if err != nil {
 		return log.Errore(err)
 	}
@@ -299,7 +317,7 @@ func commandRun(commandText string, onCommand func(*exec.Cmd)) error {
 
 	err = cmd.Run()
 	if err != nil {
-		return log.Errore(err)
+		return log.Errorf(stderr.String())
 	}
 
 	return nil
@@ -604,32 +622,6 @@ func MySQLStart() error {
 	return err
 }
 
-func GetAvailableSeedMethods() []string {
-	var avaliableSeedMethods []string
-	var cmd string
-
-	for _, seedMethod := range seedMethods {
-		switch seedMethod {
-		case "lvm":
-			cmd = "lvs"
-		case "xtrabackup-stream":
-			cmd = "xtrabackup"
-		default:
-			cmd = seedMethod
-		}
-		err := commandRun(
-			fmt.Sprintf("%s --version", cmd),
-			func(cmd *exec.Cmd) {
-				log.Debug("Checking for seed method", seedMethod)
-			})
-		if err == nil {
-			log.Debug("seed method", seedMethod, "found")
-			avaliableSeedMethods = append(avaliableSeedMethods, seedMethod)
-		}
-	}
-	return avaliableSeedMethods
-}
-
 func ReceiveMySQLSeedData(seedId string) error {
 	directory := config.Config.MySQLDataDir
 
@@ -695,4 +687,137 @@ func AbortSeed(seedId string) error {
 
 func ExecCustomCmdWithOutput(commandKey string) ([]byte, error) {
 	return commandOutput(config.Config.CustomCommands[commandKey])
+}
+
+func contains(item string, list []string) bool {
+	for _, b := range list {
+		if item == b {
+			return true
+		}
+	}
+	return false
+}
+
+// These magical multiplies for logicalSize (0.6 in case of compression, 0.8 in other cases) are just raw estimates. They can be wrong, but we will use them
+// as 'we should have at least' space check, because we can't make any accurate estimations for logical backups
+func GetMySQLDatabaseInfo() (dbinfo MySQLDatabaseInfo, err error) {
+	dbi := make(map[string]*MySQLDatabase)
+	var physicalSize, tokuPhysicalSize, logicalSize int64 = 0, 0, 0
+	databases, err := dbagent.GetMySQLDatabases()
+	for _, db := range databases {
+		engines, err := dbagent.GetMySQLEngines(db)
+		if err != nil {
+			log.Errore(err)
+		}
+		for _, engine := range engines {
+			if engine != "TokuDB" {
+				physicalSize, err = DirectorySize(path.Join(config.Config.MySQLDataDir, db))
+				if err != nil {
+					log.Errore(err)
+				}
+			} else {
+				tokuPhysicalSize, err = dbagent.GetTokuDBSize(db)
+				if err != nil {
+					log.Errore(err)
+				}
+			}
+		}
+		physicalSize += tokuPhysicalSize
+		if config.Config.CompressLogicalBackup {
+			logicalSize = int64(float64(physicalSize) * 0.6)
+		} else {
+			logicalSize = int64(float64(physicalSize) * 0.8)
+		}
+		dbi[db] = &MySQLDatabase{engines, physicalSize, logicalSize}
+		dbinfo.MySQLDatabases = dbi
+	}
+	dbinfo.InnoDBLogSize, err = dbagent.GetInnoDBLogSize()
+	if err != nil {
+		log.Errore(err)
+	}
+	return dbinfo, err
+}
+
+func GetAvailableSeedMethods() []string {
+	var avaliableSeedMethods []string
+	var cmd string
+
+	for _, seedMethod := range seedMethods {
+		switch seedMethod {
+		case "lvm":
+			cmd = "lvs"
+		case "xtrabackup-stream":
+			cmd = "xtrabackup"
+		default:
+			cmd = seedMethod
+		}
+		err := commandRun(
+			fmt.Sprintf("%s --version", cmd),
+			func(cmd *exec.Cmd) {
+				log.Debug("Checking for seed method", seedMethod)
+			})
+		if err == nil {
+			log.Debug("seed method", seedMethod, "found")
+			avaliableSeedMethods = append(avaliableSeedMethods, seedMethod)
+		}
+	}
+	return avaliableSeedMethods
+}
+
+func StartLocalBackup(seedId string, seedMethod string, databases string) (backupFolder string, err error) {
+	var cmd string
+	backupFolder = path.Join(config.Config.MySQLBackupDir, time.Now().Format("20060102-150405"))
+	err = os.Mkdir(backupFolder, 0755)
+	if err != nil {
+		return "", log.Errore(err)
+	}
+	if !contains(seedMethod, seedMethods) {
+		return "", log.Errorf("Unsupported seed method")
+	}
+	if databases != "" {
+		availiableDatabases, _ := dbagent.GetMySQLDatabases()
+		for _, db := range strings.Split(databases, ",") {
+			if !contains(db, availiableDatabases) {
+				return "", log.Errorf("Cannot backup database %+v. Database doesn't exists", db)
+			}
+		}
+	}
+	switch seedMethod {
+	case "xtrabackup":
+		cmd = fmt.Sprintf("xtrabackup --backup --user=%s --password=%s --port=%d --parallel=%d --target-dir=%s --databases='%s'",
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.XtrabackupParallelThreads, backupFolder, strings.Replace(databases, ",", " ", -1))
+	case "mydumper":
+		cmd = fmt.Sprintf("mydumper --user=%s --password=%s --port=%d --threads=%d --outputdir=%s --regex='(%s)'",
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, backupFolder, strings.Replace(databases, ",", "\\.|", -1)+"\\.")
+		if config.Config.CompressLogicalBackup {
+			cmd += fmt.Sprintf(" --compress")
+		}
+		if config.Config.MyDumperRowsChunkSize != 0 {
+			cmd += fmt.Sprintf(" --rows=%d", config.Config.MyDumperRowsChunkSize)
+		}
+	case "mysqldump":
+		if databases == "" {
+			cmd = fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --master-data=1 --routines --events --triggers --all-databases",
+				config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
+		} else {
+			cmd = fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --master-data=1 --routines --events --triggers --databases %s",
+				config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Replace(databases, ",", " ", -1))
+		}
+		if config.Config.CompressLogicalBackup {
+			cmd += fmt.Sprintf(" | gzip > %s/backup.sql.gz", backupFolder)
+		} else {
+			cmd += fmt.Sprintf(" > %s/backup.sql", backupFolder)
+		}
+	}
+	err = commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("StartLocalBackup command completed")
+		})
+	if err != nil {
+		return "", log.Errore(err)
+	}
+
+	return backupFolder, err
 }

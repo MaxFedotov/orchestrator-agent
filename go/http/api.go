@@ -141,7 +141,20 @@ func (this *HttpAPI) GetMySQLDatabases(params martini.Params, r render.Render, r
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := dbagent.GetMySQLDatabaseInfo()
+	output, err := osagent.GetMySQLDatabaseInfo()
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, output)
+}
+
+// StartLocalBackup initiates a process of local backup and returns backup folder
+func (this *HttpAPI) StartLocalBackup(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	output, err := osagent.StartLocalBackup(params["seedId"], params["seedMethod"], params["databases"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -657,6 +670,8 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/lvs-snapshots", this.ListSnapshotsLogicalVolumes)
 	m.Get("/api/mysql-info", this.GetMySQLInfo)
 	m.Get("/api/mysql-databases", this.GetMySQLDatabases)
+	m.Get("/api/start-local-backup/:seedId/:seedMethod", this.StartLocalBackup)
+	m.Get("/api/start-local-backup/:seedId/:seedMethod/:databases", this.StartLocalBackup)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)
 	m.Get("/api/mount", this.GetMount)
