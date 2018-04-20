@@ -73,7 +73,7 @@ type Configuration struct {
 	XtrabackupParallelThreads          int               // Number of threads Xtrabackup will use to copy multiple data files concurrently when creating a backup
 	MyDumperParallelThreads            int               // Number of threads MyDumper\MyLoader will use for dumping and restoring data
 	MyDumperRowsChunkSize              int               // Split table into chunks of this many rows. 0 - unlimited
-	MyDumperCompress                   bool              // Compress output mydumper files
+	CompressLogicalBackup              bool              // Compress output mydumper/mysqldump files
 }
 
 var Config = NewConfiguration()
@@ -126,7 +126,7 @@ func NewConfiguration() *Configuration {
 		XtrabackupParallelThreads:          1,
 		MyDumperParallelThreads:            1,
 		MyDumperRowsChunkSize:              0,
-		MyDumperCompress:                   true,
+		CompressLogicalBackup:              true,
 	}
 }
 

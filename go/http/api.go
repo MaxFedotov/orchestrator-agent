@@ -30,7 +30,7 @@ import (
 
 	"github.com/github/orchestrator-agent/go/agent"
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/github/orchestrator-agent/go/inst"
+	"github.com/github/orchestrator-agent/go/dbagent"
 	"github.com/github/orchestrator-agent/go/osagent"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/render"
@@ -128,7 +128,20 @@ func (this *HttpAPI) GetMySQLInfo(params martini.Params, r render.Render, req *h
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := inst.GetMySQLInfo()
+	output, err := dbagent.GetMySQLInfo()
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, output)
+}
+
+// GetMySQLDatabases returns information about database engines and their sizes
+func (this *HttpAPI) GetMySQLDatabases(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	output, err := dbagent.GetMySQLDatabaseInfo()
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -643,6 +656,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/lvs/:pattern", this.ListLogicalVolumes)
 	m.Get("/api/lvs-snapshots", this.ListSnapshotsLogicalVolumes)
 	m.Get("/api/mysql-info", this.GetMySQLInfo)
+	m.Get("/api/mysql-databases", this.GetMySQLDatabases)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)
 	m.Get("/api/mount", this.GetMount)

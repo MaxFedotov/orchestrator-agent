@@ -33,5 +33,5 @@
     "XtrabackupParallelThreads": 5,
     "MyDumperParallelThreads": 4,
     "MyDumperRowsChunkSize": 0,
-    "MyDumperCompress": true
-}
+    "CompressLogicalBackup": true
+  }
