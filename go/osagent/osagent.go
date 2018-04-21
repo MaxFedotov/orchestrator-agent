@@ -521,6 +521,20 @@ func DeleteDirContents(path string) error {
 	return nil
 }
 
+// DeleteFile deletes file located in folder. Can be used with wildcards
+func DeleteFile(path string, file string) error {
+	files, err := filepath.Glob(filepath.Join(path, file))
+	if err != nil {
+		return log.Errore(err)
+	}
+	for _, f := range files {
+		if err := os.Remove(f); err != nil {
+			return log.Errore(err)
+		}
+	}
+	return err
+}
+
 // PostCopy executes a post-copy command -- after LVM copy is done, before service starts. Some cleanup may go here.
 func PostCopy() error {
 	_, err := commandOutput(config.Config.PostCopyCommand)
@@ -764,10 +778,10 @@ func GetAvailableSeedMethods() []string {
 	return avaliableSeedMethods
 }
 
-func StartLocalBackup(seedId string, seedMethod string, databases string) (backupFolder string, err error) {
+func StartLocalBackup(seedId string, seedMethod string, databases string) (BackupFolder string, err error) {
 	var cmd string
-	backupFolder = path.Join(config.Config.MySQLBackupDir, time.Now().Format("20060102-150405"))
-	err = os.Mkdir(backupFolder, 0755)
+	BackupFolder = path.Join(config.Config.MySQLBackupDir, time.Now().Format("20060102-150405"))
+	err = os.Mkdir(BackupFolder, 0755)
 	if err != nil {
 		return "", log.Errore(err)
 	}
@@ -789,10 +803,10 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (backu
 	switch seedMethod {
 	case "xtrabackup":
 		cmd = fmt.Sprintf("xtrabackup --backup --user=%s --password=%s --port=%d --parallel=%d --target-dir=%s --databases='%s'",
-			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.XtrabackupParallelThreads, backupFolder, strings.Replace(databases, ",", " ", -1))
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.XtrabackupParallelThreads, BackupFolder, strings.Replace(databases, ",", " ", -1))
 	case "mydumper":
 		cmd = fmt.Sprintf("mydumper --user=%s --password=%s --port=%d --threads=%d --outputdir=%s --regex='(%s)'",
-			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, backupFolder, strings.Replace(databases, ",", "\\.|", -1)+"\\.")
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, BackupFolder, strings.Replace(databases, ",", "\\.|", -1)+"\\.")
 		if config.Config.CompressLogicalBackup {
 			cmd += fmt.Sprintf(" --compress")
 		}
@@ -808,9 +822,9 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (backu
 				config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Replace(databases, ",", " ", -1))
 		}
 		if config.Config.CompressLogicalBackup {
-			cmd += fmt.Sprintf(" | gzip > %s/backup.sql.gz", backupFolder)
+			cmd += fmt.Sprintf(" | gzip > %s/backup.sql.gz", BackupFolder)
 		} else {
-			cmd += fmt.Sprintf(" > %s/backup.sql", backupFolder)
+			cmd += fmt.Sprintf(" > %s/backup.sql", BackupFolder)
 		}
 	}
 	err = commandRun(
@@ -822,5 +836,47 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (backu
 	if err != nil {
 		return "", log.Errore(err)
 	}
-	return backupFolder, err
+	return BackupFolder, err
+}
+
+func ReceiveBackup(seedId string, streamToDatadir bool) (BackupFolder string, err error) {
+	BackupFolder = config.Config.MySQLBackupDir
+	if streamToDatadir {
+		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --routines --events --triggers --databases mysql",
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
+		err = commandRun(
+			fmt.Sprintf(cmd),
+			func(cmd *exec.Cmd) {
+				activeCommands[seedId] = cmd
+				log.Debug("Backing up MySQL users")
+			})
+		if err != nil {
+			return "", log.Errore(err)
+		}
+		err = MySQLStop()
+		if err != nil {
+			return "", log.Errore(err)
+		}
+		err = DeleteFile(config.Config.MySQLInnoDBLogDir, "ib_logfile*")
+		if err != nil {
+			return "", log.Errore(err)
+		}
+		err = DeleteDirContents(config.Config.MySQLDataDir)
+		if err != nil {
+			return "", log.Errore(err)
+		}
+		BackupFolder = config.Config.MySQLDataDir
+	}
+	cmd := fmt.Sprintf("nc -l -w60 %d | tar xf - -C %s",
+		config.Config.SeedPort, config.Config.MySQLBackupDir)
+	err = commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Receiving MySQL backup")
+		})
+	if err != nil {
+		return "", log.Errore(err)
+	}
+	return BackupFolder, err
 }
