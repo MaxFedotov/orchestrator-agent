@@ -64,8 +64,10 @@ type Configuration struct {
 	CustomCommands                     map[string]string // Anything in this list of options will be exposed as an API callable options
 	TokenHintFile                      string            // If defined, token will be stored in this file
 	TokenHttpHeader                    string            // If defined, name of HTTP header where token is presented (as alternative to query param)
-	MySQLTopologyUser                  string            // Username used by orchestrator agent to connect to MySQL
-	MySQLTopologyPassword              string            // Password for MySQL user used by orchestrator agent to connect to MySQL
+	MySQLTopologyUser                  string            // Username used by orchestrator-agent to connect to MySQL
+	MySQLTopologyPassword              string            // Password for MySQL user used by orchestrator-agent to connect to MySQL
+	MySQLReplicationUser               string            // Username used to setup MySQL replication
+	MySQLReplicationPassword           string            // Password for MySQLReplicationUser
 	MySQLPort                          int               // Port on which mysqld is listening. Read from my.cnf
 	MySQLDataDir                       string            // Location of MySQL datadir. Read from my.cnf
 	MySQLErrorLog                      string            // Location of MySQL error log file. Read from my.cnf
@@ -119,6 +121,8 @@ func NewConfiguration() *Configuration {
 		TokenHttpHeader:                    "",
 		MySQLTopologyUser:                  "",
 		MySQLTopologyPassword:              "",
+		MySQLReplicationUser:               "",
+		MySQLReplicationPassword:           "",
 		MySQLPort:                          3306,
 		MySQLDataDir:                       "",
 		MySQLErrorLog:                      "",

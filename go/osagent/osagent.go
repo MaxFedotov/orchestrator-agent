@@ -782,6 +782,10 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (backu
 			}
 		}
 	}
+	err = dbagent.ManageReplicationUser()
+	if err != nil {
+		return "", log.Errore(err)
+	}
 	switch seedMethod {
 	case "xtrabackup":
 		cmd = fmt.Sprintf("xtrabackup --backup --user=%s --password=%s --port=%d --parallel=%d --target-dir=%s --databases='%s'",
@@ -818,6 +822,5 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (backu
 	if err != nil {
 		return "", log.Errore(err)
 	}
-
 	return backupFolder, err
 }

@@ -19,6 +19,7 @@ type MySQLInfo struct {
 	MySQLVersion         string
 	IsSlave              bool
 	IsMaster             bool
+	IsBinlogEnabled      bool
 	HasActiveConnections bool
 }
 
@@ -49,107 +50,130 @@ func QueryData(query string, argsArray []interface{}, on_row func(sqlutils.RowMa
 	return log.Criticale(sqlutils.QueryRowsMap(db, query, on_row, argsArray...))
 }
 
-func getMySQLVersion() (version string, err error) {
+func ExecuteQuery(query string, args ...interface{}) (sql.Result, error) {
+	var err error
+	db, err := OpenConnection()
+	if err != nil {
+		return nil, err
+	}
+	res, err := sqlutils.ExecNoPrepare(db, query, args...)
+	return res, err
+}
+
+func getMySQLVersion() (Version string, err error) {
 	query := `SELECT @@version;`
 	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
-		version = m.GetString("@@version")
+		Version = m.GetString("@@version")
 		return nil
 	})
 	if err == nil {
-		version = version[0:strings.LastIndex(version, ".")]
+		Version = Version[0:strings.LastIndex(Version, ".")]
 	}
 	if err != nil {
 		log.Errore(err)
 	}
-	return version, err
+	return Version, err
 }
 
-func isSlave() (isSlave bool, err error) {
+func isBinlogEnabled() (IsBinlogEnabled bool, err error) {
+	query := `SHOW VARIABLES LIKE 'log_bin';`
+	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
+		IsBinlogEnabled = (m.GetString("Value") == "ON")
+		return nil
+	})
+	if err != nil {
+		log.Errore(err)
+	}
+	return IsBinlogEnabled, err
+}
+
+func isSlave() (IsSlave bool, err error) {
 	query := `SHOW SLAVE STATUS;`
 	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		ioThreadRunning := (m.GetString("Slave_IO_Running") == "Yes")
 		sqlThreadRunning := (m.GetString("Slave_SQL_Running") == "Yes")
-		isSlave = ioThreadRunning && sqlThreadRunning
+		IsSlave = ioThreadRunning && sqlThreadRunning
 		return nil
 	})
 	if err != nil {
 		log.Errore(err)
 	}
-	return isSlave, err
+	return IsSlave, err
 }
 
-func isMaster() (isMaster bool, err error) {
+func isMaster() (IsMaster bool, err error) {
 	query := `SHOW SLAVE HOSTS;`
 	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
-		isMaster = (len(m.GetString("Slave_UUID")) != 0)
+		IsMaster = (len(m.GetString("Slave_UUID")) != 0)
 		return nil
 
 	})
 	if err != nil {
 		log.Errore(err)
 	}
-	return isMaster, err
+	return IsMaster, err
 }
 
-func hasActiveConnections() (hasActiveConnections bool, err error) {
+func hasActiveConnections() (HasActiveConnections bool, err error) {
 	query := `SELECT COUNT(*) AS con FROM INFORMATION_SCHEMA.PROCESSLIST WHERE User NOT IN (?,?,?);`
 	err = QueryData(query, sqlutils.Args("event_scheduler", "system user", config.Config.MySQLTopologyUser), func(m sqlutils.RowMap) error {
 		conCnt := m.GetInt("con")
 		if conCnt > connectionThreshold {
-			hasActiveConnections = true
+			HasActiveConnections = true
 		}
 		return nil
 	})
 	if err != nil {
 		log.Errore(err)
 	}
-	return hasActiveConnections, err
+	return HasActiveConnections, err
 }
 
-func GetMySQLInfo() (mysqlinfo MySQLInfo, err error) {
-	mysqlinfo.MySQLVersion, err = getMySQLVersion()
-	mysqlinfo.IsSlave, err = isSlave()
-	mysqlinfo.IsMaster, err = isMaster()
-	mysqlinfo.HasActiveConnections, err = hasActiveConnections()
-	return mysqlinfo, err
+func GetMySQLInfo() (MysqlInfo MySQLInfo, err error) {
+	MysqlInfo.MySQLVersion, err = getMySQLVersion()
+	MysqlInfo.IsSlave, err = isSlave()
+	MysqlInfo.IsMaster, err = isMaster()
+	MysqlInfo.IsBinlogEnabled, err = isBinlogEnabled()
+	MysqlInfo.HasActiveConnections, err = hasActiveConnections()
+	return MysqlInfo, err
 }
 
-func GetMySQLDatabases() (databases []string, err error) {
+func GetMySQLDatabases() (Databases []string, err error) {
 	query := `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME NOT IN ('information_schema','mysql','performance_schema','sys');`
 	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		db := m.GetString("SCHEMA_NAME")
-		databases = append(databases, db)
+		Databases = append(Databases, db)
 		return nil
 	})
 	if err != nil {
 		log.Errore(err)
 	}
-	return databases, err
+	return Databases, err
 }
 
-func GetMySQLEngines(dbname string) (engines []string, err error) {
+func GetMySQLEngines(dbname string) (Engines []string, err error) {
 	query := `SELECT engine FROM information_schema.tables where TABLE_SCHEMA = ? and table_type = 'BASE TABLE' GROUP BY engine;`
 	err = QueryData(query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
 		engine := m.GetString("engine")
-		engines = append(engines, engine)
+		Engines = append(Engines, engine)
 		return nil
 	})
 	if err != nil {
 		log.Errore(err)
 	}
-	return engines, err
+	return Engines, err
 }
 
-func GetTokuDBSize(dbname string) (tokuSize int64, err error) {
+func GetTokuDBSize(dbname string) (TokuSize int64, err error) {
 	query := `SELECT SUM(bt_size_allocated) AS tables_size FROM information_schema.TokuDB_fractal_tree_info WHERE table_schema = ?;`
 	err = QueryData(query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
-		tokuSize = m.GetInt64("tables_size")
+		TokuSize = m.GetInt64("tables_size")
 		return nil
 	})
 	if err != nil {
 		log.Errore(err)
 	}
-	return tokuSize, err
+	return TokuSize, err
 }
 
 func GetInnoDBLogSize() (InnoDBLogSize int64, err error) {
@@ -162,4 +186,53 @@ func GetInnoDBLogSize() (InnoDBLogSize int64, err error) {
 		log.Errore(err)
 	}
 	return InnoDBLogSize, err
+}
+
+func UserExists(username string) (UserExists bool) {
+	query := `SELECT user FROM mysql.user WHERE user=?;`
+	err := QueryData(query, sqlutils.Args(username), func(m sqlutils.RowMap) error {
+		UserExists = (len(m.GetString("user")) != 0)
+		return nil
+	})
+	if err != nil {
+		log.Errore(err)
+	}
+	return UserExists
+}
+
+func HasGrant(username string, grant string) (HasGrant bool) {
+	query := `SELECT * FROM mysql.user WHERE user=?;`
+	err := QueryData(query, sqlutils.Args(username), func(m sqlutils.RowMap) error {
+		HasGrant = (m.GetString(grant) == "Y")
+		return nil
+	})
+	if err != nil {
+		log.Errore(err)
+	}
+	return HasGrant
+}
+
+func CreateUser(username string, host string, password string) error {
+	_, err := ExecuteQuery(`CREATE USER ?@? IDENTIFIED BY ?;`, username, host, password)
+	return err
+}
+
+func GrantUser(username string, host string, grant string, object string) error {
+	query := fmt.Sprintf("GRANT %s ON %s TO '%s'@'%s';", grant, object, username, host)
+	_, err := ExecuteQuery(query)
+	return err
+}
+
+func ManageReplicationUser() error {
+	var err error
+	if !UserExists(config.Config.MySQLReplicationUser) {
+		err = CreateUser(config.Config.MySQLReplicationUser, "%", config.Config.MySQLReplicationPassword)
+		if err != nil {
+			return err
+		}
+	}
+	if !HasGrant(config.Config.MySQLReplicationUser, "Repl_slave_priv") {
+		err = GrantUser(config.Config.MySQLReplicationUser, "%", "REPLICATION SLAVE", "*.*")
+	}
+	return err
 }

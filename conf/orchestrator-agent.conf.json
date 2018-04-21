@@ -28,6 +28,8 @@
     "TokenHintFile": "",
     "MySQLTopologyUser": "orc_client_user",
     "MySQLTopologyPassword": "orc_client_user",
+    "MySQLReplicationUser": "replicator",
+    "MySQLReplicationPassword": "replicatorpassword",
     "MySQLBackupDir": "/tmp/bkp/",
     "SeedPort": 21234,
     "XtrabackupParallelThreads": 5,
