@@ -842,8 +842,12 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (Backu
 func ReceiveBackup(seedId string, streamToDatadir bool) (BackupFolder string, err error) {
 	BackupFolder = config.Config.MySQLBackupDir
 	if streamToDatadir {
-		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --routines --events --triggers --databases mysql",
-			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
+		MySQLInnoDBLogDir := config.Config.MySQLInnoDBLogDir
+		if len(MySQLInnoDBLogDir) == 0 {
+			MySQLInnoDBLogDir = config.Config.MySQLDataDir
+		}
+		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql  > %s/mysql.sql",
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, BackupFolder)
 		err = commandRun(
 			fmt.Sprintf(cmd),
 			func(cmd *exec.Cmd) {
@@ -857,7 +861,7 @@ func ReceiveBackup(seedId string, streamToDatadir bool) (BackupFolder string, er
 		if err != nil {
 			return "", log.Errore(err)
 		}
-		err = DeleteFile(config.Config.MySQLInnoDBLogDir, "ib_logfile*")
+		err = DeleteFile(MySQLInnoDBLogDir, "ib_logfile*")
 		if err != nil {
 			return "", log.Errore(err)
 		}
@@ -867,7 +871,7 @@ func ReceiveBackup(seedId string, streamToDatadir bool) (BackupFolder string, er
 		}
 		BackupFolder = config.Config.MySQLDataDir
 	}
-	cmd := fmt.Sprintf("nc -l -w60 %d | tar xf - -C %s",
+	cmd := fmt.Sprintf("nc -l -w180 -p %d | tar xf - -C %s",
 		config.Config.SeedPort, config.Config.MySQLBackupDir)
 	err = commandRun(
 		fmt.Sprintf(cmd),

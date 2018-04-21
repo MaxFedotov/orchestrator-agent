@@ -164,10 +164,19 @@ func (this *HttpAPI) StartLocalBackup(params martini.Params, r render.Render, re
 
 // ReceiveBackup initiates a process of receiving backup using netcat. if streamToDatadir is true we do some prerequsites steps
 func (this *HttpAPI) ReceiveBackup(params martini.Params, r render.Render, req *http.Request) {
+	var streamToDatadir bool
+	var err error
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := osagent.ReceiveBackup(params["seedId"], params["streamToDatadir"])
+	if len(params["streamToDatadir"]) != 0 {
+		streamToDatadir, err = strconv.ParseBool(params["streamToDatadir"])
+		if err != nil {
+			r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+			return
+		}
+	}
+	output, err := osagent.ReceiveBackup(params["seedId"], streamToDatadir)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
