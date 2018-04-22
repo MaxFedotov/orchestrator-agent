@@ -184,6 +184,27 @@ func (this *HttpAPI) ReceiveBackup(params martini.Params, r render.Render, req *
 	r.JSON(200, err == nil)
 }
 
+// SendLocalBackup initiates a process of sending local backup to targetHost via netcat
+func (this *HttpAPI) SendLocalBackup(params martini.Params, r render.Render, req *http.Request) {
+	var err error
+	var backupFolder string
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	backupFolder, err = url.QueryUnescape(params["backupFolder"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+
+	err = osagent.SendLocalBackup(params["seedId"], params["targetHost"], backupFolder)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
 // LogicalVolume lists a logical volume by name/path/mount point
 func (this *HttpAPI) LogicalVolume(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
@@ -695,6 +716,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/start-local-backup/:seedId/:seedMethod", this.StartLocalBackup)
 	m.Get("/api/start-local-backup/:seedId/:seedMethod/:databases", this.StartLocalBackup)
 	m.Get("/api/receive-backup/:seedId/:seedMethod/:backupFolder", this.ReceiveBackup)
+	m.Get("/api/send-local-backup/:seedId/:targetHost/:backupFolder", this.SendLocalBackup)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)
 	m.Get("/api/mount", this.GetMount)

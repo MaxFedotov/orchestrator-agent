@@ -28,6 +28,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -880,18 +881,35 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 			return log.Errore(err)
 		}
 	}
-	cmd = fmt.Sprintf("nc -l -w180 -p %d ", config.Config.SeedPort)
+	cmd = fmt.Sprintf("nc -l -w 20 -p %d ", config.Config.SeedPort)
 	switch seedMethod {
 	case "xtrabackup-stream":
 		cmd += fmt.Sprintf("| xbstream -x -C %s", backupFolder)
 	default:
-		cmd += fmt.Sprintf("| tar xf - -C %s", backupFolder)
+		cmd += fmt.Sprintf("| tar xfz - -C %s", backupFolder)
 	}
 	err := commandRun(
 		fmt.Sprintf(cmd),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
 			log.Debug("Receiving MySQL backup")
+		})
+	if err != nil {
+		return log.Errore(err)
+	}
+	return err
+}
+
+func SendLocalBackup(seedId string, targetHost string, backupFolder string) error {
+	cmd := fmt.Sprintf("tar cfz - -C %s . | nc -w 20 %s %d", backupFolder, targetHost, config.Config.SeedPort)
+	if runtime.GOOS == "darwin" {
+		cmd += " -c"
+	}
+	err := commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Sending MySQL backup")
 		})
 	if err != nil {
 		return log.Errore(err)
