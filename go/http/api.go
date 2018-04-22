@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/pprof"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -164,24 +165,23 @@ func (this *HttpAPI) StartLocalBackup(params martini.Params, r render.Render, re
 
 // ReceiveBackup initiates a process of receiving backup using netcat. if streamToDatadir is true we do some prerequsites steps
 func (this *HttpAPI) ReceiveBackup(params martini.Params, r render.Render, req *http.Request) {
-	var streamToDatadir bool
 	var err error
+	var backupFolder string
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	if len(params["streamToDatadir"]) != 0 {
-		streamToDatadir, err = strconv.ParseBool(params["streamToDatadir"])
-		if err != nil {
-			r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-			return
-		}
-	}
-	output, err := osagent.ReceiveBackup(params["seedId"], streamToDatadir)
+	backupFolder, err = url.QueryUnescape(params["backupFolder"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	r.JSON(200, output)
+
+	err = osagent.ReceiveBackup(params["seedId"], params["seedMethod"], backupFolder)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
 }
 
 // LogicalVolume lists a logical volume by name/path/mount point
@@ -694,8 +694,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/mysql-databases", this.GetMySQLDatabases)
 	m.Get("/api/start-local-backup/:seedId/:seedMethod", this.StartLocalBackup)
 	m.Get("/api/start-local-backup/:seedId/:seedMethod/:databases", this.StartLocalBackup)
-	m.Get("/api/receive-backup/:seedId", this.ReceiveBackup)
-	m.Get("/api/receive-backup/:seedId/:streamToDatadir", this.ReceiveBackup)
+	m.Get("/api/receive-backup/:seedId/:seedMethod/:backupFolder", this.ReceiveBackup)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)
 	m.Get("/api/mount", this.GetMount)

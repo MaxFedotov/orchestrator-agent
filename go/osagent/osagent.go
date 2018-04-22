@@ -839,48 +839,62 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (Backu
 	return BackupFolder, err
 }
 
-func ReceiveBackup(seedId string, streamToDatadir bool) (BackupFolder string, err error) {
-	BackupFolder = config.Config.MySQLBackupDir
-	if streamToDatadir {
-		MySQLInnoDBLogDir := config.Config.MySQLInnoDBLogDir
-		if len(MySQLInnoDBLogDir) == 0 {
+func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error {
+	var cmd string
+	var MySQLInnoDBLogDir string
+	if !contains(seedMethod, seedMethods) {
+		return log.Errorf("Unsupported seed method")
+	}
+	if backupFolder == config.Config.MySQLDataDir && seedMethod == "xtrabackup-stream" {
+		if len(config.Config.MySQLInnoDBLogDir) == 0 {
 			MySQLInnoDBLogDir = config.Config.MySQLDataDir
+		} else {
+			MySQLInnoDBLogDir = config.Config.MySQLInnoDBLogDir
 		}
 		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql  > %s/mysql.sql",
-			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, BackupFolder)
-		err = commandRun(
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MySQLBackupDir)
+		err := commandRun(
 			fmt.Sprintf(cmd),
 			func(cmd *exec.Cmd) {
 				activeCommands[seedId] = cmd
 				log.Debug("Backing up MySQL users")
 			})
 		if err != nil {
-			return "", log.Errore(err)
+			return log.Errore(err)
 		}
 		err = MySQLStop()
 		if err != nil {
-			return "", log.Errore(err)
+			return log.Errore(err)
 		}
 		err = DeleteFile(MySQLInnoDBLogDir, "ib_logfile*")
 		if err != nil {
-			return "", log.Errore(err)
+			return log.Errore(err)
 		}
 		err = DeleteDirContents(config.Config.MySQLDataDir)
 		if err != nil {
-			return "", log.Errore(err)
+			return log.Errore(err)
 		}
-		BackupFolder = config.Config.MySQLDataDir
+	} else {
+		err := os.Mkdir(backupFolder, 0755)
+		if err != nil {
+			return log.Errore(err)
+		}
 	}
-	cmd := fmt.Sprintf("nc -l -w180 -p %d | tar xf - -C %s",
-		config.Config.SeedPort, config.Config.MySQLBackupDir)
-	err = commandRun(
+	cmd = fmt.Sprintf("nc -l -w180 -p %d ", config.Config.SeedPort)
+	switch seedMethod {
+	case "xtrabackup-stream":
+		cmd += fmt.Sprintf("| xbstream -x -C %s", backupFolder)
+	default:
+		cmd += fmt.Sprintf("| tar xf - -C %s", backupFolder)
+	}
+	err := commandRun(
 		fmt.Sprintf(cmd),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
 			log.Debug("Receiving MySQL backup")
 		})
 	if err != nil {
-		return "", log.Errore(err)
+		return log.Errore(err)
 	}
-	return BackupFolder, err
+	return err
 }

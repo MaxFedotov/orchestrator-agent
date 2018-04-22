@@ -17,6 +17,7 @@ const (
 // MySQLInfo provides information nesessary for pre-seed checks
 type MySQLInfo struct {
 	MySQLVersion         string
+	MySQLDatadirPath     string
 	IsSlave              bool
 	IsMaster             bool
 	IsBinlogEnabled      bool
@@ -129,13 +130,26 @@ func hasActiveConnections() (HasActiveConnections bool, err error) {
 	return HasActiveConnections, err
 }
 
-func GetMySQLInfo() (MysqlInfo MySQLInfo, err error) {
-	MysqlInfo.MySQLVersion, err = getMySQLVersion()
-	MysqlInfo.IsSlave, err = isSlave()
-	MysqlInfo.IsMaster, err = isMaster()
-	MysqlInfo.IsBinlogEnabled, err = isBinlogEnabled()
-	MysqlInfo.HasActiveConnections, err = hasActiveConnections()
-	return MysqlInfo, err
+func getMySQLDatadirPath() (MySQLDatadirPath string, err error) {
+	query := `SELECT @@datadir`
+	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
+		MySQLDatadirPath = m.GetString("@@datadir")
+		return nil
+	})
+	if err != nil {
+		log.Errore(err)
+	}
+	return MySQLDatadirPath, err
+}
+
+func GetMySQLInfo() (Info MySQLInfo, err error) {
+	Info.MySQLVersion, err = getMySQLVersion()
+	Info.MySQLDatadirPath, err = getMySQLDatadirPath()
+	Info.IsSlave, err = isSlave()
+	Info.IsMaster, err = isMaster()
+	Info.IsBinlogEnabled, err = isBinlogEnabled()
+	Info.HasActiveConnections, err = hasActiveConnections()
+	return Info, err
 }
 
 func GetMySQLDatabases() (Databases []string, err error) {

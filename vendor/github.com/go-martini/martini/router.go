@@ -116,7 +116,7 @@ func (r *router) Handle(res http.ResponseWriter, req *http.Request, context Cont
 	var bestVals map[string]string
 	var bestRoute *route
 	for _, route := range r.getRoutes() {
-		match, vals := route.Match(req.Method, req.URL.Path)
+		match, vals := route.Match(req.Method, req.URL.RawPath) //req.URL.Path
 		if match.BetterThan(bestMatch) {
 			bestMatch = match
 			bestVals = vals
