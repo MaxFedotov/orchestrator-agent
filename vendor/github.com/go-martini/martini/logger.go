@@ -10,6 +10,10 @@ import (
 func Logger() Handler {
 	return func(res http.ResponseWriter, req *http.Request, c Context, log *log.Logger) {
 		start := time.Now()
+		path := req.URL.RawPath
+		if len(path) == 0 {
+			path = req.URL.Path
+		}
 
 		addr := req.Header.Get("X-Real-IP")
 		if addr == "" {
@@ -19,7 +23,7 @@ func Logger() Handler {
 			}
 		}
 
-		log.Printf("Started %s %s for %s", req.Method, req.URL.RawPath, addr) //req.URL.Path
+		log.Printf("Started %s %s for %s", req.Method, path, addr) //req.URL.Path
 
 		rw := res.(ResponseWriter)
 		c.Next()

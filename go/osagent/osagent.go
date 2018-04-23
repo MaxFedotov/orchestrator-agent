@@ -806,7 +806,7 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (Backu
 		cmd = fmt.Sprintf("xtrabackup --backup --user=%s --password=%s --port=%d --parallel=%d --target-dir=%s --databases='%s'",
 			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.XtrabackupParallelThreads, BackupFolder, strings.Replace(databases, ",", " ", -1))
 	case "mydumper":
-		cmd = fmt.Sprintf("mydumper --user=%s --password=%s --port=%d --threads=%d --outputdir=%s --regex='(%s)'",
+		cmd = fmt.Sprintf("mydumper --user=%s --password=%s --port=%d --threads=%d --outputdir=%s --triggers --events --routines --regex='(%s)'",
 			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, BackupFolder, strings.Replace(databases, ",", "\\.|", -1)+"\\.")
 		if config.Config.CompressLogicalBackup {
 			cmd += fmt.Sprintf(" --compress")
@@ -909,10 +909,41 @@ func SendLocalBackup(seedId string, targetHost string, backupFolder string) erro
 		fmt.Sprintf(cmd),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
-			log.Debug("Sending MySQL backup")
+			log.Debugf("Sending MySQL backup to %+v", targetHost)
 		})
 	if err != nil {
 		return log.Errore(err)
 	}
 	return err
+}
+
+func StartStreamingBackup(seedId string, targetHost string, databases string) error {
+	if databases != "" {
+		availiableDatabases, _ := dbagent.GetMySQLDatabases()
+		for _, db := range strings.Split(databases, ",") {
+			if !contains(db, availiableDatabases) {
+				return log.Errorf("Cannot backup database %+v. Database doesn't exists", db)
+			}
+		}
+	}
+	err := dbagent.ManageReplicationUser()
+	if err != nil {
+		log.Errore(err)
+	}
+	cmd := fmt.Sprintf("innobackupex %s --stream=xbstream --user=%s --password=%s --port=%d --parallel=%d --databases='%s' | nc -w 20 %s %d",
+		config.Config.MySQLBackupDir, config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.XtrabackupParallelThreads, strings.Replace(databases, ",", " ", -1), targetHost, config.Config.SeedPort)
+	if runtime.GOOS == "darwin" {
+		cmd += " -c"
+	}
+	err = commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debugf("Streaming xtrabackup to %+v", targetHost)
+		})
+	if err != nil {
+		return log.Errore(err)
+	}
+	return err
+
 }

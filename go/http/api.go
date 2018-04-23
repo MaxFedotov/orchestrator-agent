@@ -163,6 +163,19 @@ func (this *HttpAPI) StartLocalBackup(params martini.Params, r render.Render, re
 	r.JSON(200, output)
 }
 
+// StartStreamingBackup initiates a process of streaming backup to
+func (this *HttpAPI) StartStreamingBackup(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	err := osagent.StartStreamingBackup(params["seedId"], params["targetHost"], params["databases"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
 // ReceiveBackup initiates a process of receiving backup using netcat. if streamToDatadir is true we do some prerequsites steps
 func (this *HttpAPI) ReceiveBackup(params martini.Params, r render.Render, req *http.Request) {
 	var err error
@@ -715,6 +728,8 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/mysql-databases", this.GetMySQLDatabases)
 	m.Get("/api/start-local-backup/:seedId/:seedMethod", this.StartLocalBackup)
 	m.Get("/api/start-local-backup/:seedId/:seedMethod/:databases", this.StartLocalBackup)
+	m.Get("/api/start-streaming-backup/:seedId/:targetHost", this.StartStreamingBackup)
+	m.Get("/api/start-streaming-backup/:seedId/:targetHost/:databases", this.StartStreamingBackup)
 	m.Get("/api/receive-backup/:seedId/:seedMethod/:backupFolder", this.ReceiveBackup)
 	m.Get("/api/send-local-backup/:seedId/:targetHost/:backupFolder", this.SendLocalBackup)
 	m.Get("/api/lv", this.LogicalVolume)
