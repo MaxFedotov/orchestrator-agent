@@ -28,7 +28,7 @@
     },
     "TokenHintFile": "",
     "MySQLTopologyUser": "orc_client_user",
-    "MySQLTopologyPassword": "orc_client_user",
+    "MySQLTopologyPassword": "orc_client_password",
     "MySQLReplicationUser": "replicator",
     "MySQLReplicationPassword": "replicatorpassword",
     "MySQLBackupDir": "/tmp/bkp/",

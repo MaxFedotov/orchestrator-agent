@@ -46,6 +46,7 @@ var seedMethods = []string{"xtrabackup", "xtrabackup-stream", "lvm", "mydumper",
 const (
 	mysqlbackupFileName           = "backup.sql"
 	mysqlbackupCompressedFileName = "backup.sql.gz"
+	mydumperMetadataFile          = "metadata"
 )
 
 // LogicalVolume describes an LVM volume
@@ -988,7 +989,7 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 		return log.Errore(err)
 	}
 	if seedMethod == "mysqldump" {
-		err = restoreMySQLDump(seedId, sourceHost, sourcePort, backupFolder)
+		err = restoreMySQLDump(seedId, backupFolder)
 		if err != nil {
 			return log.Errore(err)
 		}
@@ -996,7 +997,39 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 		if err != nil {
 			return log.Errore(err)
 		}
-		err = startSlave(sourceHost, sourcePort, "", "", "")
+		err = dbagent.StartSlave(sourceHost, sourcePort, "", "", "")
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	if seedMethod == "mydumper" {
+		logFile, position, gtidPurged, err := parseMydumperMetadata(backupFolder)
+		if err != nil {
+			return log.Errore(err)
+		}
+		//mydumper doesn't set sql_mode correctly, so if we will do the same way as mysqldump does. Remember old sql_mode, than set it to
+		//NO_AUTO_VALUE_ON_ZERO and then set it back
+		sqlMode, err := dbagent.GetMySQLSql_mode()
+		if err != nil {
+			return log.Errore(err)
+		}
+		err = dbagent.SetMySQLSql_mode("NO_AUTO_VALUE_ON_ZERO")
+		if err != nil {
+			return log.Errore(err)
+		}
+		err = restoreMydumper(seedId, backupFolder)
+		if err != nil {
+			return log.Errore(err)
+		}
+		err = dbagent.ManageReplicationUser()
+		if err != nil {
+			return log.Errore(err)
+		}
+		err = dbagent.SetMySQLSql_mode(sqlMode)
+		if err != nil {
+			return log.Errore(err)
+		}
+		err = dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged)
 		if err != nil {
 			return log.Errore(err)
 		}
@@ -1004,7 +1037,43 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 	return err
 }
 
-func restoreMySQLDump(seedId string, sourceHost string, sourcePort int, backupFolder string) error {
+func parseMydumperMetadata(backupFolder string) (logFile string, position string, gtidPurged string, err error) {
+	file, err := os.Open(path.Join(backupFolder, mydumperMetadataFile))
+	if err != nil {
+		return "", "", "", log.Errore(err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		if strings.Contains(scanner.Text(), "Log:") {
+			logFile = strings.Trim(strings.Split(scanner.Text(), ":")[1], " ")
+		}
+		if strings.Contains(scanner.Text(), "Pos:") {
+			position = strings.Trim(strings.Split(scanner.Text(), ":")[1], " ")
+		}
+		if strings.Contains(scanner.Text(), "GTID:") {
+			gtidPurged = strings.Trim(strings.Split(scanner.Text(), ":")[1], " ")
+		}
+	}
+	return logFile, position, gtidPurged, err
+}
+
+func restoreMydumper(seedId string, backupFolder string) error {
+	cmd := fmt.Sprintf("myloader -u %s -p %s --port %d -t %d -d %s -o",
+		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, backupFolder)
+	err := commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Restoring using mydumper")
+		})
+	if err != nil {
+		return log.Errore(err)
+	}
+	return err
+}
+
+func restoreMySQLDump(seedId string, backupFolder string) error {
 	if config.Config.CompressLogicalBackup {
 		cmd := fmt.Sprintf("gunzip -c %s > %s", path.Join(backupFolder, mysqlbackupCompressedFileName), path.Join(backupFolder, mysqlbackupFileName))
 		err := commandRun(
@@ -1024,36 +1093,6 @@ func restoreMySQLDump(seedId string, sourceHost string, sourcePort int, backupFo
 			activeCommands[seedId] = cmd
 			log.Debug("Restoring using mysqlbackup")
 		})
-	if err != nil {
-		return log.Errore(err)
-	}
-	return err
-}
-
-func startSlave(sourceHost string, sourcePort int, logFile string, position string, gtidPurged string) error {
-	var err error
-	if len(logFile) > 0 && len(position) > 0 {
-		query := fmt.Sprintf("CHANGE MASTER TO MASTER_LOG_FILE='%s', MASTER_LOG_POS=%s;", logFile, position)
-		_, err = dbagent.ExecuteQuery(query)
-		if err != nil {
-			return log.Errore(err)
-		}
-	}
-	if len(gtidPurged) > 0 {
-		query := fmt.Sprintf("SET @@GLOBAL.GTID_PURGED='%s';", gtidPurged)
-		_, err = dbagent.ExecuteQuery(query)
-		if err != nil {
-			return log.Errore(err)
-		}
-	}
-	query := fmt.Sprintf("CHANGE MASTER TO MASTER_HOST='%s', MASTER_USER='%s', MASTER_PASSWORD='%s', MASTER_PORT=%d, MASTER_CONNECT_RETRY=10;",
-		sourceHost, config.Config.MySQLReplicationUser, config.Config.MySQLReplicationPassword, sourcePort)
-	_, err = dbagent.ExecuteQuery(query)
-	if err != nil {
-		return log.Errore(err)
-	}
-	query = "START SLAVE;"
-	_, err = dbagent.ExecuteQuery(query)
 	if err != nil {
 		return log.Errore(err)
 	}

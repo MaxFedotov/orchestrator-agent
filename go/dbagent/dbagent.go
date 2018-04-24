@@ -76,6 +76,24 @@ func getMySQLVersion() (Version string, err error) {
 	return Version, err
 }
 
+func GetMySQLSql_mode() (sqlMode string, err error) {
+	query := `SELECT @@sql_mode;`
+	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
+		sqlMode = m.GetString("@@sql_mode")
+		return nil
+	})
+	if err != nil {
+		log.Errore(err)
+	}
+	return sqlMode, err
+}
+
+func SetMySQLSql_mode(sqlMode string) error {
+	query := fmt.Sprintf("SET GLOBAL SQL_MODE='%s';", sqlMode)
+	_, err := ExecuteQuery(query)
+	return err
+}
+
 func isBinlogEnabled() (IsBinlogEnabled bool, err error) {
 	query := `SHOW VARIABLES LIKE 'log_bin';`
 	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
@@ -247,6 +265,36 @@ func ManageReplicationUser() error {
 	}
 	if !HasGrant(config.Config.MySQLReplicationUser, "Repl_slave_priv") {
 		err = GrantUser(config.Config.MySQLReplicationUser, "%", "REPLICATION SLAVE", "*.*")
+	}
+	return err
+}
+
+func StartSlave(sourceHost string, sourcePort int, logFile string, position string, gtidPurged string) error {
+	var err error
+	if len(logFile) > 0 && len(position) > 0 {
+		query := fmt.Sprintf(`CHANGE MASTER TO MASTER_LOG_FILE='%s', MASTER_LOG_POS=%s;`, logFile, position)
+		_, err = ExecuteQuery(query)
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	if len(gtidPurged) > 0 {
+		query := fmt.Sprintf(`SET @@GLOBAL.GTID_PURGED='%s';`, gtidPurged)
+		_, err = ExecuteQuery(query)
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	query := fmt.Sprintf(`CHANGE MASTER TO MASTER_HOST='%s', MASTER_USER='%s', MASTER_PASSWORD='%s', MASTER_PORT=%d, MASTER_CONNECT_RETRY=10;`,
+		sourceHost, config.Config.MySQLReplicationUser, config.Config.MySQLReplicationPassword, sourcePort)
+	_, err = ExecuteQuery(query)
+	if err != nil {
+		return log.Errore(err)
+	}
+	query = `START SLAVE;`
+	_, err = ExecuteQuery(query)
+	if err != nil {
+		return log.Errore(err)
 	}
 	return err
 }
