@@ -46,7 +46,10 @@ var seedMethods = []string{"xtrabackup", "xtrabackup-stream", "lvm", "mydumper",
 const (
 	mysqlbackupFileName           = "backup.sql"
 	mysqlbackupCompressedFileName = "backup.sql.gz"
+	mysqlUserBackupFileName       = "mysql_users_backup.sql"
 	mydumperMetadataFile          = "metadata"
+	xtrabackupMetadataFile        = "xtrabackup_binlog_info"
+	mysqlRestartSleepInterval     = 20
 )
 
 // LogicalVolume describes an LVM volume
@@ -639,12 +642,13 @@ func MySQLStop() error {
 }
 
 func MySQLStart() error {
-	_, err := commandOutput(config.Config.MySQLServiceStartCommand)
+	cmd := fmt.Sprintf("%s; sleep %d", config.Config.MySQLServiceRestartCommand, mysqlRestartSleepInterval)
+	_, err := commandOutput(cmd)
 	return err
 }
 
 func MySQLRestart() error {
-	cmd := fmt.Sprintf("%s; sleep 20", config.Config.MySQLServiceRestartCommand)
+	cmd := fmt.Sprintf("%s; sleep %d", config.Config.MySQLServiceRestartCommand, mysqlRestartSleepInterval)
 	_, err := commandOutput(cmd)
 	return err
 }
@@ -852,6 +856,18 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (Backu
 	return BackupFolder, err
 }
 
+func backupMySQLUsers(seedId string) error {
+	cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql > %s",
+		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
+	err := commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Backing up MySQL users")
+		})
+	return err
+}
+
 func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error {
 	var cmd string
 	var MySQLInnoDBLogDir string
@@ -864,14 +880,7 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 		} else {
 			MySQLInnoDBLogDir = config.Config.MySQLInnoDBLogDir
 		}
-		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql  > %s/mysql_users_backup.sql",
-			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MySQLBackupDir)
-		err := commandRun(
-			fmt.Sprintf(cmd),
-			func(cmd *exec.Cmd) {
-				activeCommands[seedId] = cmd
-				log.Debug("Backing up MySQL users")
-			})
+		err := backupMySQLUsers(seedId)
 		if err != nil {
 			return log.Errore(err)
 		}
@@ -1007,7 +1016,7 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 		if err != nil {
 			return log.Errore(err)
 		}
-		//mydumper doesn't set sql_mode correctly, so if we will do the same way as mysqldump does. Remember old sql_mode, than set it to
+		//mydumper doesn't set sql_mode correctly, so we will do the same way as mysqldump does. Remember old sql_mode, than set it to
 		//NO_AUTO_VALUE_ON_ZERO and then set it back
 		sqlMode, err := dbagent.GetMySQLSql_mode()
 		if err != nil {
@@ -1034,7 +1043,42 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 			return log.Errore(err)
 		}
 	}
+	if seedMethod == "xtrabackup" || seedMethod == "xtrabackup-stream" {
+		logFile, position, gtidPurged, err := parseXtrabackupMetadata(backupFolder)
+		if err != nil {
+			return log.Errore(err)
+		}
+		err = dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged)
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
 	return err
+}
+
+//func restoreXtrabackupBackupDir() error {
+//
+//}
+
+func parseXtrabackupMetadata(backupFolder string) (logFile string, position string, gtidPurged string, err error) {
+	var params []string
+	file, err := os.Open(path.Join(backupFolder, xtrabackupMetadataFile))
+	if err != nil {
+		return "", "", "", log.Errore(err)
+	}
+	defer file.Close()
+	reader := bufio.NewReader(file)
+	metadata, err := reader.ReadString('\n')
+	if err != nil {
+		return "", "", "", log.Errore(err)
+	}
+	params = strings.Split(metadata, "\t")
+	logFile = params[0]
+	position = strings.Trim(params[1], "\n")
+	if len(params) > 2 {
+		gtidPurged = strings.Trim(params[2], "\n")
+	}
+	return logFile, position, gtidPurged, log.Errore(err)
 }
 
 func parseMydumperMetadata(backupFolder string) (logFile string, position string, gtidPurged string, err error) {
