@@ -37,6 +37,7 @@ type Configuration struct {
 	SnapshotVolumesFilter              string            // text pattern filtering agent logical volumes that are valid snapshots
 	MySQLServiceStopCommand            string            // Command to stop mysql, e.g. /etc/init.d/mysql stop
 	MySQLServiceStartCommand           string            // Command to start mysql, e.g. /etc/init.d/mysql start
+	MySQLServiceRestartCommand         string            // Command to restart mysql, e.g. /etc/init.d/mysql restart
 	MySQLServiceStatusCommand          string            // Command to check mysql status. Expects 0 return value when running, non-zero when not running, e.g. /etc/init.d/mysql status
 	MySQLBackupDir                     string            // Path to directory on host where backup files will be stored
 	SeedPort                           int               // Port used for transfering backup data
@@ -79,7 +80,7 @@ type Configuration struct {
 }
 
 var Config = NewConfiguration()
-var confFiles = make(map[string]struct{})
+var confFiles = make(map[string]string)
 
 func NewConfiguration() *Configuration {
 	return &Configuration{
@@ -92,6 +93,7 @@ func NewConfiguration() *Configuration {
 		SnapshotVolumesFilter:              "",
 		MySQLServiceStopCommand:            "",
 		MySQLServiceStartCommand:           "",
+		MySQLServiceRestartCommand:         "",
 		MySQLServiceStatusCommand:          "",
 		MySQLBackupDir:                     "",
 		SeedPort:                           21234,
@@ -143,8 +145,8 @@ func readJSON(fileName string) (*Configuration, error) {
 		err := decoder.Decode(Config)
 		if err == nil {
 			log.Infof("Read config: %s", fileName)
-			if _, ok := confFiles[fileName]; !ok {
-				confFiles[fileName] = struct{}{}
+			if _, ok := confFiles["Agent"]; !ok {
+				confFiles["Agent"] = fileName
 			}
 		} else {
 			log.Fatal("Cannot read config file:", fileName, err)
@@ -173,12 +175,35 @@ func readINI(fileName string) (*Configuration, error) {
 		Config.MySQLPort, _ = sec.Key("port").Int()
 		Config.MySQLDataDir = sec.Key("datadir").String()
 		Config.MySQLInnoDBLogDir = sec.Key("innodb_log_group_home_dir").String()
-		if _, ok := confFiles[fileName]; !ok {
-			confFiles[fileName] = struct{}{}
+		if _, ok := confFiles["MySQL"]; !ok {
+			confFiles["MySQL"] = fileName
 		}
 		log.Infof("Read config: %s", fileName)
 	}
 	return Config, err
+}
+
+// AddKeyToMySQLConfig add new key with value to my.cnf
+func AddKeyToMySQLConfig(key string, value string) error {
+	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true, AllowShadows: true}, confFiles["MySQL"])
+	if err == nil {
+		sec := cfg.Section("mysqld")
+		if sec.Haskey(key) {
+			existingValues := sec.Key(key).ValueWithShadows()
+			for _, existingValue := range existingValues {
+				if value == existingValue {
+					return nil
+				}
+			}
+		}
+		_, err := sec.NewKey(key, value)
+		if err != nil {
+			return log.Errore(err)
+		}
+
+		cfg.SaveTo(confFiles["MySQL"])
+	}
+	return err
 }
 
 // Read reads configuration from zero, either, some or all given files, in order of input.
@@ -233,7 +258,7 @@ func WatchConf() {
 		}()
 
 		for key := range confFiles {
-			err = watcher.Add(key)
+			err = watcher.Add(confFiles[key])
 			if err != nil {
 				log.Errorf("Unable to add watcher for config file %s. Error: %s", key, err)
 			}

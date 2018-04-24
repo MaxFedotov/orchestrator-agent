@@ -163,12 +163,38 @@ func (this *HttpAPI) StartLocalBackup(params martini.Params, r render.Render, re
 	r.JSON(200, output)
 }
 
-// StartStreamingBackup initiates a process of streaming backup to
+// StartStreamingBackup initiates a process of streaming backup to targetHost
 func (this *HttpAPI) StartStreamingBackup(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
 	err := osagent.StartStreamingBackup(params["seedId"], params["targetHost"], params["databases"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
+// StartRestore initiates a process of restoring backup
+func (this *HttpAPI) StartRestore(params martini.Params, r render.Render, req *http.Request) {
+	var err error
+	var backupFolder string
+	var sourcePort int
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	backupFolder, err = url.QueryUnescape(params["backupFolder"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	sourcePort, err = strconv.Atoi(params["sourcePort"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	err = osagent.StartRestore(params["seedId"], params["seedMethod"], params["sourceHost"], sourcePort, backupFolder, params["databases"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -732,6 +758,8 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/start-streaming-backup/:seedId/:targetHost/:databases", this.StartStreamingBackup)
 	m.Get("/api/receive-backup/:seedId/:seedMethod/:backupFolder", this.ReceiveBackup)
 	m.Get("/api/send-local-backup/:seedId/:targetHost/:backupFolder", this.SendLocalBackup)
+	m.Get("/api/start-restore/:seedId/:seedMethod/:sourceHost/:sourcePort/:backupFolder", this.StartRestore)
+	m.Get("/api/start-restore/:seedId/:seedMethod/:sourceHost/:sourcePort/:backupFolder/:databases", this.StartRestore)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)
 	m.Get("/api/mount", this.GetMount)

@@ -43,6 +43,11 @@ import (
 var activeCommands = make(map[string]*exec.Cmd)
 var seedMethods = []string{"xtrabackup", "xtrabackup-stream", "lvm", "mydumper", "mysqldump"}
 
+const (
+	mysqlbackupFileName           = "backup.sql"
+	mysqlbackupCompressedFileName = "backup.sql.gz"
+)
+
 // LogicalVolume describes an LVM volume
 type LogicalVolume struct {
 	Name            string
@@ -637,6 +642,12 @@ func MySQLStart() error {
 	return err
 }
 
+func MySQLRestart() error {
+	cmd := fmt.Sprintf("%s; sleep 20", config.Config.MySQLServiceRestartCommand)
+	_, err := commandOutput(cmd)
+	return err
+}
+
 func ReceiveMySQLSeedData(seedId string) error {
 	directory := config.Config.MySQLDataDir
 
@@ -823,9 +834,9 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (Backu
 				config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Replace(databases, ",", " ", -1))
 		}
 		if config.Config.CompressLogicalBackup {
-			cmd += fmt.Sprintf(" | gzip > %s/backup.sql.gz", BackupFolder)
+			cmd += fmt.Sprintf(" | gzip > %s", path.Join(BackupFolder, mysqlbackupCompressedFileName))
 		} else {
-			cmd += fmt.Sprintf(" > %s/backup.sql", BackupFolder)
+			cmd += fmt.Sprintf(" > %s", path.Join(BackupFolder, mysqlbackupFileName))
 		}
 	}
 	err = commandRun(
@@ -852,7 +863,7 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 		} else {
 			MySQLInnoDBLogDir = config.Config.MySQLInnoDBLogDir
 		}
-		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql  > %s/mysql.sql",
+		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql  > %s/mysql_users_backup.sql",
 			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MySQLBackupDir)
 		err := commandRun(
 			fmt.Sprintf(cmd),
@@ -946,4 +957,105 @@ func StartStreamingBackup(seedId string, targetHost string, databases string) er
 	}
 	return err
 
+}
+
+// well be used in order to perform cleanup in case of restore errors
+//func Cleanup() err {
+//
+//}
+
+func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePort int, backupFolder string, databases string) (err error) {
+	if !contains(seedMethod, seedMethods) {
+		return log.Errorf("Unsupported seed method")
+	}
+	if len(databases) > 0 {
+		for _, db := range strings.Split(databases, ",") {
+			err := config.AddKeyToMySQLConfig("replicate-do-db", db)
+			if err != nil {
+				return log.Errore(err)
+			}
+		}
+		err := MySQLRestart()
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	// as we are restoring new slave and if we have GTIDs we may have @@GLOBAL.GTID_EXECUTED not empty and we won't be able to set @@GLOBAL.GTID_PURGED
+	// so we need to do RESET MASTER on slave
+	query := "RESET MASTER;"
+	_, err = dbagent.ExecuteQuery(query)
+	if err != nil {
+		return log.Errore(err)
+	}
+	if seedMethod == "mysqldump" {
+		err = restoreMySQLDump(seedId, sourceHost, sourcePort, backupFolder)
+		if err != nil {
+			return log.Errore(err)
+		}
+		err = dbagent.ManageReplicationUser()
+		if err != nil {
+			return log.Errore(err)
+		}
+		err = startSlave(sourceHost, sourcePort, "", "", "")
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	return err
+}
+
+func restoreMySQLDump(seedId string, sourceHost string, sourcePort int, backupFolder string) error {
+	if config.Config.CompressLogicalBackup {
+		cmd := fmt.Sprintf("gunzip -c %s > %s", path.Join(backupFolder, mysqlbackupCompressedFileName), path.Join(backupFolder, mysqlbackupFileName))
+		err := commandRun(
+			fmt.Sprintf(cmd),
+			func(cmd *exec.Cmd) {
+				activeCommands[seedId] = cmd
+				log.Debug("Extracting mysqldump backup")
+			})
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	cmd := fmt.Sprintf("mysql -u%s -p%s --port %d < %s", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(backupFolder, mysqlbackupFileName))
+	err := commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Restoring using mysqlbackup")
+		})
+	if err != nil {
+		return log.Errore(err)
+	}
+	return err
+}
+
+func startSlave(sourceHost string, sourcePort int, logFile string, position string, gtidPurged string) error {
+	var err error
+	if len(logFile) > 0 && len(position) > 0 {
+		query := fmt.Sprintf("CHANGE MASTER TO MASTER_LOG_FILE='%s', MASTER_LOG_POS=%s;", logFile, position)
+		_, err = dbagent.ExecuteQuery(query)
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	if len(gtidPurged) > 0 {
+		query := fmt.Sprintf("SET @@GLOBAL.GTID_PURGED='%s';", gtidPurged)
+		_, err = dbagent.ExecuteQuery(query)
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	query := fmt.Sprintf("CHANGE MASTER TO MASTER_HOST='%s', MASTER_USER='%s', MASTER_PASSWORD='%s', MASTER_PORT=%d, MASTER_CONNECT_RETRY=10;",
+		sourceHost, config.Config.MySQLReplicationUser, config.Config.MySQLReplicationPassword, sourcePort)
+	_, err = dbagent.ExecuteQuery(query)
+	if err != nil {
+		return log.Errore(err)
+	}
+	query = "START SLAVE;"
+	_, err = dbagent.ExecuteQuery(query)
+	if err != nil {
+		return log.Errore(err)
+	}
+	return err
 }
