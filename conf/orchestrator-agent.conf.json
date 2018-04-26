@@ -32,6 +32,7 @@
     "MySQLReplicationUser": "replicator",
     "MySQLReplicationPassword": "replicatorpassword",
     "MySQLBackupDir": "/tmp/bkp/",
+    "MySQLBackupUsersOnTargetHost": ["'root'@'localhost'","'test'@'localhost'"],
     "SeedPort": 21234,
     "XtrabackupParallelThreads": 5,
     "MyDumperParallelThreads": 4,

@@ -61,7 +61,7 @@ func ExecuteQuery(query string, args ...interface{}) (sql.Result, error) {
 	return res, err
 }
 
-func getMySQLVersion() (Version string, err error) {
+func GetMySQLVersion() (Version string, err error) {
 	query := `SELECT @@version;`
 	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		Version = m.GetString("@@version")
@@ -161,7 +161,7 @@ func getMySQLDatadirPath() (MySQLDatadirPath string, err error) {
 }
 
 func GetMySQLInfo() (Info MySQLInfo, err error) {
-	Info.MySQLVersion, err = getMySQLVersion()
+	Info.MySQLVersion, err = GetMySQLVersion()
 	Info.MySQLDatadirPath, err = getMySQLDatadirPath()
 	Info.IsSlave, err = isSlave()
 	Info.IsMaster, err = isMaster()
@@ -253,6 +253,37 @@ func GrantUser(username string, host string, grant string, object string) error 
 	query := fmt.Sprintf("GRANT %s ON %s TO '%s'@'%s';", grant, object, username, host)
 	_, err := ExecuteQuery(query)
 	return err
+}
+
+func GenerateBackupForUsers(users []string) (backup string, err error) {
+	version, err := GetMySQLVersion()
+	if err != nil {
+		return "", log.Errore(err)
+	}
+	if db, err := OpenConnection(); err == nil {
+		if version == "5.7" {
+			for _, user := range users {
+				query := fmt.Sprintf("SHOW CREATE USER %s", user)
+				res, err := sqlutils.QueryResultData(db, query)
+				if err != nil {
+					log.Errore(err)
+				}
+				backup += res[0][0].String + ";\n"
+			}
+
+		}
+		for _, user := range users {
+			query := fmt.Sprintf("SHOW GRANTS FOR %s", user)
+			res, err := sqlutils.QueryResultData(db, query)
+			if err != nil {
+				log.Errore(err)
+			}
+			for r := range res {
+				backup += res[r][0].String + ";\n"
+			}
+		}
+	}
+	return backup, err
 }
 
 func ManageReplicationUser() error {

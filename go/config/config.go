@@ -73,6 +73,7 @@ type Configuration struct {
 	MySQLDataDir                       string            // Location of MySQL datadir. Read from my.cnf
 	MySQLErrorLog                      string            // Location of MySQL error log file. Read from my.cnf
 	MySQLInnoDBLogDir                  string            // Location of ib_logfile. Read from my.cnf
+	MySQLBackupUsersOnTargetHost       []string          // If set, we will backup only these users from targetHost and restore after seed operation completes. All other users will be replaced from sourceHost. If not set, we will keep all users from targetHost
 	XtrabackupParallelThreads          int               // Number of threads Xtrabackup will use to copy multiple data files concurrently when creating a backup
 	MyDumperParallelThreads            int               // Number of threads MyDumper\MyLoader will use for dumping and restoring data
 	MyDumperRowsChunkSize              int               // Split table into chunks of this many rows. 0 - unlimited
@@ -113,6 +114,7 @@ func NewConfiguration() *Configuration {
 		SSLCertFile:                        "",
 		SSLCAFile:                          "",
 		SSLValidOUs:                        []string{},
+		MySQLBackupUsersOnTargetHost:       []string{},
 		StatusEndpoint:                     "/api/status",
 		StatusOUVerify:                     false,
 		StatusBadSeconds:                   300,
@@ -258,8 +260,7 @@ func WatchConf() {
 		}()
 
 		for key := range confFiles {
-			err = watcher.Add(confFiles[key])
-			if err != nil {
+			if err := watcher.Add(confFiles[key]); err != nil {
 				log.Errorf("Unable to add watcher for config file %s. Error: %s", key, err)
 			}
 		}

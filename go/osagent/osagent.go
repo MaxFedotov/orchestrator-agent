@@ -42,6 +42,8 @@ import (
 
 var activeCommands = make(map[string]*exec.Cmd)
 var seedMethods = []string{"xtrabackup", "xtrabackup-stream", "lvm", "mydumper", "mysqldump"}
+var mysqlUsersTables = []string{"user", "columns_priv", "procs_priv", "proxies_priv", "tables_priv"}
+var systemDatabases = []string{"mysql", "information_schema"}
 
 const (
 	mysqlbackupFileName           = "backup.sql"
@@ -772,7 +774,6 @@ func GetMySQLDatabaseInfo() (dbinfo MySQLDatabaseInfo, err error) {
 func GetAvailableSeedMethods() []string {
 	var avaliableSeedMethods []string
 	var cmd string
-
 	for _, seedMethod := range seedMethods {
 		switch seedMethod {
 		case "lvm":
@@ -798,8 +799,7 @@ func GetAvailableSeedMethods() []string {
 func StartLocalBackup(seedId string, seedMethod string, databases string) (BackupFolder string, err error) {
 	var cmd string
 	BackupFolder = path.Join(config.Config.MySQLBackupDir, time.Now().Format("20060102-150405"))
-	err = os.Mkdir(BackupFolder, 0755)
-	if err != nil {
+	if err := os.Mkdir(BackupFolder, 0755); err != nil {
 		return "", log.Errore(err)
 	}
 	if !contains(seedMethod, seedMethods) {
@@ -812,9 +812,17 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (Backu
 				return "", log.Errorf("Cannot backup database %+v. Database doesn't exists", db)
 			}
 		}
+		//if we don't already have mysql database in databases, add it
+		if !strings.Contains(databases, "mysql") {
+			databases += ", mysql"
+		}
+		//and if we are on 5.7 we need to add sys db because sometimes during mysql_upgrade run we can get errors like mysql_upgrade: [ERROR] 1813: Tablespace '`sys`.`sys_config`' exists
+		version, _ := dbagent.GetMySQLVersion()
+		if version == "5.7" && !strings.Contains(databases, "sys") {
+			databases += ", sys"
+		}
 	}
-	err = dbagent.ManageReplicationUser()
-	if err != nil {
+	if err := dbagent.ManageReplicationUser(); err != nil {
 		return "", log.Errore(err)
 	}
 	switch seedMethod {
@@ -856,16 +864,45 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (Backu
 	return BackupFolder, err
 }
 
-func backupMySQLUsers(seedId string) error {
-	cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql > %s",
-		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
+func backupMySQLUsers(seedId string) (err error) {
+	if len(config.Config.MySQLBackupUsersOnTargetHost) > 0 {
+		statement, err := dbagent.GenerateBackupForUsers(config.Config.MySQLBackupUsersOnTargetHost)
+		if err != nil {
+			return log.Errore(err)
+		}
+		f, err := os.OpenFile(path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+		defer f.Close()
+		if err != nil {
+			return log.Errore(err)
+		}
+		_, err = f.WriteString(statement)
+		if err != nil {
+			return log.Errore(err)
+		}
+	} else {
+		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql %s > %s",
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Join(mysqlUsersTables[:], " "), path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
+		err = commandRun(
+			fmt.Sprintf(cmd),
+			func(cmd *exec.Cmd) {
+				activeCommands[seedId] = cmd
+				log.Debug("Backing up MySQL users")
+			})
+	}
+
+	return err
+}
+
+func restoreMySQLUsers(seedId string, backupFolder string) error {
+	cmd := fmt.Sprintf("mysql -u%s -p%s --port %d < %s", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(backupFolder, mysqlUserBackupFileName))
 	err := commandRun(
 		fmt.Sprintf(cmd),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
-			log.Debug("Backing up MySQL users")
+			log.Debug("Restoring using mysqlbackup")
 		})
-	return err
+
+	return log.Errore(err)
 }
 
 func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error {
@@ -880,25 +917,20 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 		} else {
 			MySQLInnoDBLogDir = config.Config.MySQLInnoDBLogDir
 		}
-		err := backupMySQLUsers(seedId)
-		if err != nil {
+		if err := backupMySQLUsers(seedId); err != nil {
 			return log.Errore(err)
 		}
-		err = MySQLStop()
-		if err != nil {
+		if err := MySQLStop(); err != nil {
 			return log.Errore(err)
 		}
-		err = DeleteFile(MySQLInnoDBLogDir, "ib_logfile*")
-		if err != nil {
+		if err := DeleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
 			return log.Errore(err)
 		}
-		err = DeleteDirContents(config.Config.MySQLDataDir)
-		if err != nil {
+		if err := DeleteDirContents(config.Config.MySQLDataDir); err != nil {
 			return log.Errore(err)
 		}
 	} else {
-		err := os.Mkdir(backupFolder, 0755)
-		if err != nil {
+		if err := os.Mkdir(backupFolder, 0755); err != nil {
 			return log.Errore(err)
 		}
 	}
@@ -946,9 +978,17 @@ func StartStreamingBackup(seedId string, targetHost string, databases string) er
 				return log.Errorf("Cannot backup database %+v. Database doesn't exists", db)
 			}
 		}
+		//if we don't already have mysql database in databases, add it
+		if !strings.Contains(databases, "mysql") {
+			databases += ", mysql"
+		}
+		//and if we are on 5.7 we need to add sys db because sometimes during mysql_upgrade run we can get errors like mysql_upgrade: [ERROR] 1813: Tablespace '`sys`.`sys_config`' exists
+		version, _ := dbagent.GetMySQLVersion()
+		if version == "5.7" && !strings.Contains(databases, "sys") {
+			databases += ", sys"
+		}
 	}
-	err := dbagent.ManageReplicationUser()
-	if err != nil {
+	if err := dbagent.ManageReplicationUser(); err != nil {
 		log.Errore(err)
 	}
 	cmd := fmt.Sprintf("innobackupex %s --stream=xbstream --user=%s --password=%s --port=%d --parallel=%d --databases='%s' | nc -w 20 %s %d",
@@ -956,7 +996,7 @@ func StartStreamingBackup(seedId string, targetHost string, databases string) er
 	if runtime.GOOS == "darwin" {
 		cmd += " -c"
 	}
-	err = commandRun(
+	err := commandRun(
 		fmt.Sprintf(cmd),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
@@ -980,34 +1020,34 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 	}
 	if len(databases) > 0 {
 		for _, db := range strings.Split(databases, ",") {
-			err := config.AddKeyToMySQLConfig("replicate-do-db", db)
-			if err != nil {
+			if err := config.AddKeyToMySQLConfig("replicate-do-db", db); err != nil {
 				return log.Errore(err)
 			}
 		}
-		err := MySQLRestart()
-		if err != nil {
+		if err := MySQLRestart(); err != nil {
+			return log.Errore(err)
+		}
+	}
+	// Backup users if we are not streaming to datadir. In case of streaming to datadir users were backuped when we recieved backup
+	if backupFolder != config.Config.MySQLDataDir {
+		if err := backupMySQLUsers(seedId); err != nil {
 			return log.Errore(err)
 		}
 	}
 	// as we are restoring new slave and if we have GTIDs we may have @@GLOBAL.GTID_EXECUTED not empty and we won't be able to set @@GLOBAL.GTID_PURGED
 	// so we need to do RESET MASTER on slave
 	query := "RESET MASTER;"
-	_, err = dbagent.ExecuteQuery(query)
-	if err != nil {
+	if _, err = dbagent.ExecuteQuery(query); err != nil {
 		return log.Errore(err)
 	}
 	if seedMethod == "mysqldump" {
-		err = restoreMySQLDump(seedId, backupFolder)
-		if err != nil {
+		if err := restoreMySQLDump(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
-		err = dbagent.ManageReplicationUser()
-		if err != nil {
+		if err := dbagent.ManageReplicationUser(); err != nil {
 			return log.Errore(err)
 		}
-		err = dbagent.StartSlave(sourceHost, sourcePort, "", "", "")
-		if err != nil {
+		if err := dbagent.StartSlave(sourceHost, sourcePort, "", "", ""); err != nil {
 			return log.Errore(err)
 		}
 	}
@@ -1022,43 +1062,105 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 		if err != nil {
 			return log.Errore(err)
 		}
-		err = dbagent.SetMySQLSql_mode("NO_AUTO_VALUE_ON_ZERO")
-		if err != nil {
+		if err := dbagent.SetMySQLSql_mode("NO_AUTO_VALUE_ON_ZERO"); err != nil {
 			return log.Errore(err)
 		}
-		err = restoreMydumper(seedId, backupFolder)
-		if err != nil {
+		if err := restoreMydumper(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
-		err = dbagent.ManageReplicationUser()
-		if err != nil {
+		if err := dbagent.ManageReplicationUser(); err != nil {
 			return log.Errore(err)
 		}
-		err = dbagent.SetMySQLSql_mode(sqlMode)
-		if err != nil {
+		if err := dbagent.SetMySQLSql_mode(sqlMode); err != nil {
 			return log.Errore(err)
 		}
-		err = dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged)
-		if err != nil {
+		if err := dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged); err != nil {
 			return log.Errore(err)
 		}
 	}
 	if seedMethod == "xtrabackup" || seedMethod == "xtrabackup-stream" {
+		var MySQLInnoDBLogDir string
 		logFile, position, gtidPurged, err := parseXtrabackupMetadata(backupFolder)
 		if err != nil {
 			return log.Errore(err)
 		}
-		err = dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged)
-		if err != nil {
+		if len(config.Config.MySQLInnoDBLogDir) == 0 {
+			MySQLInnoDBLogDir = config.Config.MySQLDataDir
+		} else {
+			MySQLInnoDBLogDir = config.Config.MySQLInnoDBLogDir
+		}
+		if err := prepareXtrabackup(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
+		// xtrabackup full\partial, xtrabackup-stream full\partial to MySQLBackupDir
+		if backupFolder != config.Config.MySQLDataDir {
+			if err := MySQLStop(); err != nil {
+				return log.Errore(err)
+			}
+			if err := DeleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
+				return log.Errore(err)
+			}
+			if err := DeleteDirContents(config.Config.MySQLDataDir); err != nil {
+				return log.Errore(err)
+			}
+			if err := copyXtrabackup(seedId, backupFolder); err != nil {
+				return log.Errore(err)
+			}
+		}
+		if err := MySQLStart(); err != nil {
+			return log.Errore(err)
+		}
+		if len(databases) > 0 {
+			if err := runMySQLUpgrade(seedId); err != nil {
+				return log.Errore(err)
+			}
+		}
+		if err := dbagent.ManageReplicationUser(); err != nil {
+			return log.Errore(err)
+		}
+		if err := dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged); err != nil {
+			return log.Errore(err)
+		}
+	}
+	// restore users
+	if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
+		return log.Errore(err)
 	}
 	return err
 }
 
-//func restoreXtrabackupBackupDir() error {
-//
-//}
+func runMySQLUpgrade(seedId string) error {
+	cmd := fmt.Sprintf("mysql_upgrade --force")
+	err := commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Running mysql_upgrade")
+		})
+	return log.Errore(err)
+}
+
+func copyXtrabackup(seedId string, backupFolder string) error {
+	cmd := fmt.Sprintf("xtrabackup --copy-back --target-dir=%s", backupFolder)
+	err := commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Copying xtrabackup to datadir")
+		})
+	return log.Errore(err)
+}
+
+func prepareXtrabackup(seedId string, backupFolder string) error {
+	cmd := fmt.Sprintf("xtrabackup --prepare --target-dir=%s", backupFolder)
+	err := commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Preparing xtrabackup")
+		})
+	return log.Errore(err)
+}
 
 func parseXtrabackupMetadata(backupFolder string) (logFile string, position string, gtidPurged string, err error) {
 	var params []string
