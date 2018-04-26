@@ -52,6 +52,7 @@ const (
 	mydumperMetadataFile          = "metadata"
 	xtrabackupMetadataFile        = "xtrabackup_binlog_info"
 	mysqlRestartSleepInterval     = 20
+	mysqlBackupDatadirName        = "mysql_datadir_backup.tar.gz"
 )
 
 // LogicalVolume describes an LVM volume
@@ -911,6 +912,18 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 	if !contains(seedMethod, seedMethods) {
 		return log.Errorf("Unsupported seed method")
 	}
+	if config.Config.MySQLBackupOldDatadir {
+		cmd := fmt.Sprintf("tar zcfp %s -C %s .", path.Join(config.Config.MySQLBackupDir, mysqlBackupDatadirName), config.Config.MySQLDataDir)
+		err := commandRun(
+			fmt.Sprintf(cmd),
+			func(cmd *exec.Cmd) {
+				activeCommands[seedId] = cmd
+				log.Debugf("Backing up old datadir")
+			})
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
 	if backupFolder == config.Config.MySQLDataDir && seedMethod == "xtrabackup-stream" {
 		if len(config.Config.MySQLInnoDBLogDir) == 0 {
 			MySQLInnoDBLogDir = config.Config.MySQLDataDir
@@ -1015,6 +1028,27 @@ func StartStreamingBackup(seedId string, targetHost string, databases string) er
 //}
 
 func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePort int, backupFolder string, databases string) (err error) {
+	err = startRestore(seedId, seedMethod, sourceHost, sourcePort, backupFolder, databases)
+	// if we backed up old datadir and have errors during restore process, let's remove contents of datadir and move back old datadir
+	if err != nil && config.Config.MySQLBackupOldDatadir {
+		if err := DeleteDirContents(config.Config.MySQLDataDir); err != nil {
+			return log.Errore(err)
+		}
+		cmd := fmt.Sprintf("tar zxfp %s -C %s", path.Join(config.Config.MySQLBackupDir, mysqlBackupDatadirName), config.Config.MySQLDataDir)
+		err := commandRun(
+			fmt.Sprintf(cmd),
+			func(cmd *exec.Cmd) {
+				activeCommands[seedId] = cmd
+				log.Debugf("Restoring old datadir")
+			})
+		if err != nil {
+			return log.Errore(err)
+		}
+	}
+	return log.Errore(err)
+}
+
+func startRestore(seedId string, seedMethod string, sourceHost string, sourcePort int, backupFolder string, databases string) (err error) {
 	if !contains(seedMethod, seedMethods) {
 		return log.Errorf("Unsupported seed method")
 	}

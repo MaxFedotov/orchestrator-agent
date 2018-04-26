@@ -74,6 +74,7 @@ type Configuration struct {
 	MySQLErrorLog                      string            // Location of MySQL error log file. Read from my.cnf
 	MySQLInnoDBLogDir                  string            // Location of ib_logfile. Read from my.cnf
 	MySQLBackupUsersOnTargetHost       []string          // If set, we will backup only these users from targetHost and restore after seed operation completes. All other users will be replaced from sourceHost. If not set, we will keep all users from targetHost
+	MySQLBackupOldDatadir              bool              // backup contents of targetHost datadir before starting seed process
 	XtrabackupParallelThreads          int               // Number of threads Xtrabackup will use to copy multiple data files concurrently when creating a backup
 	MyDumperParallelThreads            int               // Number of threads MyDumper\MyLoader will use for dumping and restoring data
 	MyDumperRowsChunkSize              int               // Split table into chunks of this many rows. 0 - unlimited
@@ -131,6 +132,7 @@ func NewConfiguration() *Configuration {
 		MySQLDataDir:                       "",
 		MySQLErrorLog:                      "",
 		MySQLInnoDBLogDir:                  "",
+		MySQLBackupOldDatadir:              false,
 		XtrabackupParallelThreads:          1,
 		MyDumperParallelThreads:            1,
 		MyDumperRowsChunkSize:              0,
