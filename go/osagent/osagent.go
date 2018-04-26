@@ -1022,10 +1022,10 @@ func StartStreamingBackup(seedId string, targetHost string, databases string) er
 
 }
 
-// well be used in order to perform cleanup in case of restore errors
-//func Cleanup() err {
-//
-//}
+func Cleanup(seedId string) error {
+	err := DeleteDirContents(config.Config.MySQLBackupDir)
+	return err
+}
 
 func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePort int, backupFolder string, databases string) (err error) {
 	err = startRestore(seedId, seedMethod, sourceHost, sourcePort, backupFolder, databases)

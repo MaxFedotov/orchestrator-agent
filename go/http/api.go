@@ -176,6 +176,19 @@ func (this *HttpAPI) StartStreamingBackup(params martini.Params, r render.Render
 	r.JSON(200, err == nil)
 }
 
+// Cleanup remove contents of config.Config.MySQLBackupDir
+func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	err := osagent.Cleanup(params["seedId"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
 // StartRestore initiates a process of restoring backup
 func (this *HttpAPI) StartRestore(params martini.Params, r render.Render, req *http.Request) {
 	var err error
@@ -760,6 +773,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/send-local-backup/:seedId/:targetHost/:backupFolder", this.SendLocalBackup)
 	m.Get("/api/start-restore/:seedId/:seedMethod/:sourceHost/:sourcePort/:backupFolder", this.StartRestore)
 	m.Get("/api/start-restore/:seedId/:seedMethod/:sourceHost/:sourcePort/:backupFolder/:databases", this.StartRestore)
+	m.Get("/api/cleanup/:seedId", this.Cleanup)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)
 	m.Get("/api/mount", this.GetMount)
