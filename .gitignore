@@ -3,6 +3,6 @@
 .gopath/
 .idea/
 *.log
-*.rpm
+orchestrator-agent-*.rpm
 vagrant-ssh-key
 vagrant-ssh-key.pub

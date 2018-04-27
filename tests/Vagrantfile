@@ -3,16 +3,14 @@ require 'getoptlong'
 opts = GetoptLong.new(
   [ '--mysql-version', GetoptLong::OPTIONAL_ARGUMENT ], #56 or 57
   [ '--mysql-replication', GetoptLong::OPTIONAL_ARGUMENT ], #gtid or positional
+  [ '--orchagent-config', GetoptLong::OPTIONAL_ARGUMENT ], #default\backupusers\mydumperrows\backupolddatadir
   [ '--custom-log-dir', GetoptLong::NO_ARGUMENT ],
-  [ '--backup-users-compress', GetoptLong::NO_ARGUMENT ],
-  [ '--mydumper-rows', GetoptLong::NO_ARGUMENT ],
-  [ '--backup-old-datadir', GetoptLong::NO_ARGUMENT ],
 )
 
 mysqlVersion=''
 mysqlReplication=''
+orchAgentConfig='default'
 customLogDir=false
-
 
 opts.each do |opt, arg|
   case opt
@@ -20,9 +18,11 @@ opts.each do |opt, arg|
       mysqlVersion=arg
     when '--mysql-replication'
       mysqlReplication=arg
+    when '--orchagent-config'
+      orchAgentConfig=arg
     when '--custom-log-dir'
       customLogDir=true
-  end
+   end
 end
 
 ENV['VAGRANT_SERVER_URL'] = "https://atlas.hashicorp.com" if ENV['VAGRANT_SERVER_URL'].nil? || ENV['VAGRANT_SERVER_URL'].empty?
@@ -37,9 +37,9 @@ system("
     fi
 ")
 if customLogDir == true
-  sargs = "-r #{mysqlReplication} -c"
+  sargs = "-r #{mysqlReplication} -c #{orchAgentConfig} -l"
 else
-  sargs = "-r #{mysqlReplication}"
+  sargs = "-r #{mysqlReplication} -c #{orchAgentConfig}"
 end
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
