@@ -63,7 +63,7 @@ func main() {
 		AppVersion = "local-build"
 	}
 
-	log.Info("starting orchestrator-agent %s", AppVersion)
+	log.Infof("starting orchestrator-agent %s", AppVersion)
 
 	if len(*configFile) > 0 {
 		config.ForceRead(*configFile)

@@ -1,0 +1,69 @@
+require 'getoptlong'
+
+opts = GetoptLong.new(
+  [ '--mysql-version', GetoptLong::OPTIONAL_ARGUMENT ], #56 or 57
+  [ '--mysql-replication', GetoptLong::OPTIONAL_ARGUMENT ], #gtid or positional
+  [ '--custom-log-dir', GetoptLong::NO_ARGUMENT ],
+  [ '--backup-users-compress', GetoptLong::NO_ARGUMENT ],
+  [ '--mydumper-rows', GetoptLong::NO_ARGUMENT ],
+  [ '--backup-old-datadir', GetoptLong::NO_ARGUMENT ],
+)
+
+mysqlVersion=''
+mysqlReplication=''
+customLogDir=false
+
+
+opts.each do |opt, arg|
+  case opt
+    when '--mysql-version'
+      mysqlVersion=arg
+    when '--mysql-replication'
+      mysqlReplication=arg
+    when '--custom-log-dir'
+      customLogDir=true
+  end
+end
+
+ENV['VAGRANT_SERVER_URL'] = "https://atlas.hashicorp.com" if ENV['VAGRANT_SERVER_URL'].nil? || ENV['VAGRANT_SERVER_URL'].empty?
+ENV['VAGRANT_DEFAULT_PROVIDER'] = 'virtualbox' if ENV['VAGRANT_DEFAULT_PROVIDER'].nil? || ENV['VAGRANT_DEFAULT_PROVIDER'].empty?
+BOX = ENV['VAGRANT_BOX'].nil? || ENV['VAGRANT_BOX'].empty? ? 'centos/7' : ENV['VAGRANT_BOX']
+
+VAGRANTFILE_API_VERSION = "2"
+
+system("
+  if [[ ! -e 'vagrant/vagrant-ssh-key' ]]; then
+      ssh-keygen -t rsa -b 1024 -N '' -q -f vagrant/vagrant-ssh-key
+    fi
+")
+if customLogDir == true
+  sargs = "-r #{mysqlReplication} -c"
+else
+  sargs = "-r #{mysqlReplication}"
+end
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.box = BOX
+  config.vm.box_download_insecure = true
+  config.vm.box_check_update = false
+  config.vm.synced_folder "./vagrant/", "/vagrant", type: "nfs"
+  config.gatling.rsync_on_startup = false
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "512"
+    vb.cpus = 2
+  end
+  
+  (1..2).each do |n|
+    name = ("orch-agent" + n.to_s) 
+    config.vm.define name do |db|
+      db.vm.hostname = name
+      db.vm.network "private_network", ip: "192.168.58.20" + n.to_s,
+      virtualbox__inet: false
+
+      if mysqlVersion != ''
+        db.vm.provision "shell", path: "vagrant/build-agent#{mysqlVersion}.sh", :args => sargs
+      end
+    end
+  end
+end

@@ -3,3 +3,6 @@
 .gopath/
 .idea/
 *.log
+*.rpm
+vagrant-ssh-key
+vagrant-ssh-key.pub

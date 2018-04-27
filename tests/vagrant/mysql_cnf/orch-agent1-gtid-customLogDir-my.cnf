@@ -1,0 +1,20 @@
+[mysqld]
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+log-error=/var/log/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+user=mysql
+innodb_log_group_home_dir=/tmp/innodblog/
+port=3306
+
+# Disabling symbolic-links is recommended to prevent assorted security risks
+symbolic-links=0
+server_id=1
+log_bin=mysql-bin
+log-slave-updates
+report-host=orch-agent1
+
+#enable GTID
+enforce-gtid-consistency
+gtid-mode=ON
+master-info-repository=TABLE

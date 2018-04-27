@@ -53,7 +53,7 @@ function precheck() {
     ok=1
   fi
 
-  if [[ $(go version | egrep "go1[.][01234]") ]]; then
+  if [[ $(go version | cut -d " " -f 3 | cut -d "." -f 2) -lt 5 ]]; then
     echo "go version is too low. Must use 1.5 or above"
     ok=1
   fi
@@ -103,8 +103,8 @@ function package() {
       tar -C $builddir/orchestrator-agent -czf $TOPDIR/orchestrator-agent-"${RELEASE_VERSION}"-$target-$arch.tar.gz ./
 
       echo "Creating Distro full packages"
-      fpm -v "${RELEASE_VERSION}" --epoch 1 -f -s dir -t rpm -n orchestrator-agent -C $builddir/orchestrator-agent --prefix=/ .
-      fpm -v "${RELEASE_VERSION}" --epoch 1 -f -s dir -t deb -n orchestrator-agent -C $builddir/orchestrator-agent --prefix=/ --deb-no-default-config-files .
+      fpm -v "${RELEASE_VERSION}" --rpm-os $target --architecture $arch --epoch 1 -f -d nc -s dir -t rpm -n orchestrator-agent -C $builddir/orchestrator-agent --prefix=/ .
+      fpm -v "${RELEASE_VERSION}" --epoch 1 -f -d nc -s dir -t deb -n orchestrator-agent -C $builddir/orchestrator-agent --prefix=/ --deb-no-default-config-files .
 
       cd $TOPDIR
       ;;
@@ -198,7 +198,11 @@ target=${target:-"linux"} # default for target is linux
 arch=${arch:-"amd64"} # default for arch is amd64
 prefix=${prefix:-"/usr/local"}
 
+dir=$(cd `dirname $0` && pwd)
+
 [[ $debug -eq 1 ]] && set -x
 main "$target" "$arch" "$prefix" "$build_only"
+
+cp $TOPDIR/*.rpm  $dir/tests/vagrant/orchestrator-agent
 
 echo "orchestrator-agent build done; exit status is $?"
