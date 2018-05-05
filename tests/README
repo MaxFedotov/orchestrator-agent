@@ -1,0 +1,17 @@
+1. install tavern and pytest:
+    pip install tavern, pytest
+2. build orchestrator-agent (use ./build.sh)    
+3. create vagrant boxes for test (see Vagrantfile for options):
+    vagrant --mysql-version=57 --mysql-replication=gtid --orchagent-config=backupolddatadir up
+4. run ./updateTokens.sh
+5. save snapshot if you plan to run different tests with current VM setup:
+    vagrant snapshot save orch-agent1
+6. start test:
+    a) common tests (use files located in conf/common/ and test_common.tavern.yaml to run different tests):
+        PYTHONPATH=$(pwd) tavern-ci --stdout --tavern-global-cfg common.yaml conf/common/mydumper_full.yaml -- test_common.tavern.yaml
+    b) stream tests (use files located in conf/stream/ and test_stream.tavern.yaml to run different tests):
+        PYTHONPATH=$(pwd) tavern-ci --stdout --tavern-global-cfg common.yaml conf/stream/xtrabackup_stream_partial_backupdir.yaml -- test_stream.tavern.yaml
+7. restore snapshot if you want to run different test with current VM setup:
+    vagrant snapshot restore orch-agent1
+8. destroy vagrant VMs:
+    vagrant --mysql-version=57 --mysql-replication=gtid --orchagent-config=backupolddatadir destroy

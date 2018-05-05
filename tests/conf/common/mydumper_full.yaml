@@ -1,0 +1,10 @@
+# mydumper_full.yaml
+
+---
+
+description:  |
+  test parameters for mydumper full seed method
+
+variables:
+  seedMethod: mydumper
+  databases: ""

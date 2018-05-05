@@ -1,0 +1,10 @@
+# mysqldump_partial.yaml
+
+---
+
+description:  |
+  test parameters for mysqldump partial seed method
+
+variables:
+  seedMethod: mysqldump
+  databases: "sakila,world"

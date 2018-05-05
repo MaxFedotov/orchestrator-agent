@@ -51,7 +51,7 @@ const (
 	mysqlUserBackupFileName       = "mysql_users_backup.sql"
 	mydumperMetadataFile          = "metadata"
 	xtrabackupMetadataFile        = "xtrabackup_binlog_info"
-	mysqlRestartSleepInterval     = 20
+	mysqlRestartSleepInterval     = 30
 	mysqlBackupDatadirName        = "mysql_datadir_backup.tar.gz"
 )
 
@@ -321,6 +321,7 @@ func commandOutput(commandText string) ([]byte, error) {
 func commandRun(commandText string, onCommand func(*exec.Cmd)) error {
 	var stderr bytes.Buffer
 	cmd, tmpFileName, err := execCmd(commandText)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stderr = &stderr
 	if err != nil {
 		return log.Errore(err)
@@ -332,6 +333,28 @@ func commandRun(commandText string, onCommand func(*exec.Cmd)) error {
 	if err != nil {
 		return log.Errorf(stderr.String())
 	}
+
+	return nil
+}
+
+// commandStart executes a command and doesn't wait for it to complete
+func commandStart(commandText string, onCommand func(*exec.Cmd)) error {
+	var stderr bytes.Buffer
+	cmd, tmpFileName, err := execCmd(commandText)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Stderr = &stderr
+	if err != nil {
+		return log.Errore(err)
+	}
+
+	onCommand(cmd)
+
+	err = cmd.Start()
+	if err != nil {
+		return log.Errorf(stderr.String())
+	}
+	time.Sleep(1000 * time.Millisecond)
+	defer os.Remove(tmpFileName)
 
 	return nil
 }
@@ -645,7 +668,7 @@ func MySQLStop() error {
 }
 
 func MySQLStart() error {
-	cmd := fmt.Sprintf("%s; sleep %d", config.Config.MySQLServiceRestartCommand, mysqlRestartSleepInterval)
+	cmd := fmt.Sprintf("%s; sleep %d", config.Config.MySQLServiceStartCommand, mysqlRestartSleepInterval)
 	_, err := commandOutput(cmd)
 	return err
 }
@@ -881,7 +904,7 @@ func backupMySQLUsers(seedId string) (err error) {
 			return log.Errore(err)
 		}
 	} else {
-		cmd := fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --databases mysql %s > %s",
+		cmd := fmt.Sprintf("mysqldump --master-data=2 --set-gtid-purged=OFF --user=%s --password=%s --port=%d --single-transaction mysql %s > %s",
 			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Join(mysqlUsersTables[:], " "), path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
 		err = commandRun(
 			fmt.Sprintf(cmd),
@@ -890,17 +913,16 @@ func backupMySQLUsers(seedId string) (err error) {
 				log.Debug("Backing up MySQL users")
 			})
 	}
-
 	return err
 }
 
 func restoreMySQLUsers(seedId string, backupFolder string) error {
-	cmd := fmt.Sprintf("mysql -u%s -p%s --port %d < %s", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(backupFolder, mysqlUserBackupFileName))
+	cmd := fmt.Sprintf("mysql -u%s -p%s --port %d mysql < %s", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
 	err := commandRun(
 		fmt.Sprintf(cmd),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
-			log.Debug("Restoring using mysqlbackup")
+			log.Debug("Restoring MySQL users")
 		})
 
 	return log.Errore(err)
@@ -908,11 +930,15 @@ func restoreMySQLUsers(seedId string, backupFolder string) error {
 
 func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error {
 	var cmd string
+	var err error
 	var MySQLInnoDBLogDir string
 	if !contains(seedMethod, seedMethods) {
 		return log.Errorf("Unsupported seed method")
 	}
 	if config.Config.MySQLBackupOldDatadir {
+		if err := MySQLStop(); err != nil {
+			return log.Errore(err)
+		}
 		cmd := fmt.Sprintf("tar zcfp %s -C %s .", path.Join(config.Config.MySQLBackupDir, mysqlBackupDatadirName), config.Config.MySQLDataDir)
 		err := commandRun(
 			fmt.Sprintf(cmd),
@@ -921,6 +947,9 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 				log.Debugf("Backing up old datadir")
 			})
 		if err != nil {
+			return log.Errore(err)
+		}
+		if err := MySQLStart(); err != nil {
 			return log.Errore(err)
 		}
 	}
@@ -947,14 +976,14 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 			return log.Errore(err)
 		}
 	}
-	cmd = fmt.Sprintf("nc -l -w 20 -p %d ", config.Config.SeedPort)
+	cmd = fmt.Sprintf("sleep 1; nc -l -p %d ", config.Config.SeedPort)
 	switch seedMethod {
 	case "xtrabackup-stream":
 		cmd += fmt.Sprintf("| xbstream -x -C %s", backupFolder)
 	default:
 		cmd += fmt.Sprintf("| tar xfz - -C %s", backupFolder)
 	}
-	err := commandRun(
+	err = commandStart(
 		fmt.Sprintf(cmd),
 		func(cmd *exec.Cmd) {
 			activeCommands[seedId] = cmd
@@ -967,7 +996,7 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 }
 
 func SendLocalBackup(seedId string, targetHost string, backupFolder string) error {
-	cmd := fmt.Sprintf("tar cfz - -C %s . | nc -w 20 %s %d", backupFolder, targetHost, config.Config.SeedPort)
+	cmd := fmt.Sprintf("tar cfz - -C %s . | nc  %s %d", backupFolder, targetHost, config.Config.SeedPort)
 	if runtime.GOOS == "darwin" {
 		cmd += " -c"
 	}
@@ -1024,6 +1053,11 @@ func StartStreamingBackup(seedId string, targetHost string, databases string) er
 
 func Cleanup(seedId string) error {
 	err := DeleteDirContents(config.Config.MySQLBackupDir)
+	// if we have some active commands, let's kill them to prevent future errors
+	cmd := activeCommands[seedId]
+	if cmd != nil {
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 	return err
 }
 
@@ -1031,6 +1065,10 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 	err = startRestore(seedId, seedMethod, sourceHost, sourcePort, backupFolder, databases)
 	// if we backed up old datadir and have errors during restore process, let's remove contents of datadir and move back old datadir
 	if err != nil && config.Config.MySQLBackupOldDatadir {
+		// stop MySQL
+		if err := MySQLStop(); err != nil {
+			return log.Errore(err)
+		}
 		if err := DeleteDirContents(config.Config.MySQLDataDir); err != nil {
 			return log.Errore(err)
 		}
@@ -1042,6 +1080,9 @@ func StartRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 				log.Debugf("Restoring old datadir")
 			})
 		if err != nil {
+			return log.Errore(err)
+		}
+		if err := MySQLStart(); err != nil {
 			return log.Errore(err)
 		}
 	}
@@ -1068,17 +1109,21 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 			return log.Errore(err)
 		}
 	}
-	// as we are restoring new slave and if we have GTIDs we may have @@GLOBAL.GTID_EXECUTED not empty and we won't be able to set @@GLOBAL.GTID_PURGED
-	// so we need to do RESET MASTER on slave
-	query := "RESET MASTER;"
-	if _, err = dbagent.ExecuteQuery(query); err != nil {
-		return log.Errore(err)
-	}
 	if seedMethod == "mysqldump" {
+		// as we are restoring new slave and if we have GTIDs we may have @@GLOBAL.GTID_EXECUTED not empty and we won't be able to set @@GLOBAL.GTID_PURGED
+		// so we need to do RESET MASTER on slave
+		query := `RESET MASTER;`
+		if _, err = dbagent.ExecuteQuery(query); err != nil {
+			return log.Errore(err)
+		}
 		if err := restoreMySQLDump(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
 		if err := dbagent.ManageReplicationUser(); err != nil {
+			return log.Errore(err)
+		}
+		// restore users
+		if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
 		if err := dbagent.StartSlave(sourceHost, sourcePort, "", "", ""); err != nil {
@@ -1108,22 +1153,26 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 		if err := dbagent.SetMySQLSql_mode(sqlMode); err != nil {
 			return log.Errore(err)
 		}
+		// restore users
+		if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
+			return log.Errore(err)
+		}
 		if err := dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged); err != nil {
 			return log.Errore(err)
 		}
 	}
 	if seedMethod == "xtrabackup" || seedMethod == "xtrabackup-stream" {
 		var MySQLInnoDBLogDir string
-		logFile, position, gtidPurged, err := parseXtrabackupMetadata(backupFolder)
-		if err != nil {
-			return log.Errore(err)
-		}
 		if len(config.Config.MySQLInnoDBLogDir) == 0 {
 			MySQLInnoDBLogDir = config.Config.MySQLDataDir
 		} else {
 			MySQLInnoDBLogDir = config.Config.MySQLInnoDBLogDir
 		}
 		if err := prepareXtrabackup(seedId, backupFolder); err != nil {
+			return log.Errore(err)
+		}
+		logFile, position, gtidPurged, err := parseXtrabackupMetadata(backupFolder)
+		if err != nil {
 			return log.Errore(err)
 		}
 		// xtrabackup full\partial, xtrabackup-stream full\partial to MySQLBackupDir
@@ -1141,6 +1190,9 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 				return log.Errore(err)
 			}
 		}
+		if err := changeDatadirPermissions(seedId); err != nil {
+			return log.Errore(err)
+		}
 		if err := MySQLStart(); err != nil {
 			return log.Errore(err)
 		}
@@ -1148,23 +1200,37 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 			if err := runMySQLUpgrade(seedId); err != nil {
 				return log.Errore(err)
 			}
+			if err := MySQLRestart(); err != nil {
+				return log.Errore(err)
+			}
 		}
 		if err := dbagent.ManageReplicationUser(); err != nil {
+			return log.Errore(err)
+		}
+		// restore users
+		if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
 		if err := dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged); err != nil {
 			return log.Errore(err)
 		}
 	}
-	// restore users
-	if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
-		return log.Errore(err)
-	}
 	return err
 }
 
+func changeDatadirPermissions(seedId string) error {
+	cmd := fmt.Sprintf("chown -R mysql:mysql %s", config.Config.MySQLDataDir)
+	err := commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Changing permissions on MySQL datadir")
+		})
+	return log.Errore(err)
+}
+
 func runMySQLUpgrade(seedId string) error {
-	cmd := fmt.Sprintf("mysql_upgrade --force")
+	cmd := fmt.Sprintf("mysql_upgrade --protocol=tcp -u%s -p%s --port %d --force", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
 	err := commandRun(
 		fmt.Sprintf(cmd),
 		func(cmd *exec.Cmd) {

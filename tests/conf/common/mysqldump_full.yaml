@@ -1,0 +1,10 @@
+# mysqldump_full.yaml
+
+---
+
+description:  |
+  test parameters for mysqldump full seed method
+
+variables:
+  seedMethod: mysqldump
+  databases: ""

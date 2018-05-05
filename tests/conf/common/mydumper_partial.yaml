@@ -1,0 +1,10 @@
+# mydumper_partial.yaml
+
+---
+
+description:  |
+  test parameters for mydumper partial seed method
+
+variables:
+  seedMethod: mydumper
+  databases: "sakila,world"

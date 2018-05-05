@@ -1,0 +1,12 @@
+# common.yaml
+
+---
+
+description:  |
+  common information for all tests
+
+variables:
+  sourceHost: orch-agent1
+  targetHost: orch-agent2
+  sourceToken: ca512d78c421433f00fb8ef3c136cff607cae8e53ab58edc8209347a665da285
+  targetToken: f49df660a0cf964c56b333bff63887f1a27e1cc803320453b7b3e6df6451662d

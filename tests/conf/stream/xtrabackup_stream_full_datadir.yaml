@@ -1,0 +1,11 @@
+# xtrabackup_stream_full_datadir.yaml
+
+---
+
+description:  |
+  test parameters for xtrabackup stream full to datadir seed method
+
+variables:
+  seedMethod: xtrabackup-stream
+  backupFolder: '%2Fvar%2Flib%2Fmysql'
+  databases: ""

@@ -1,0 +1,11 @@
+# xtrabackup_stream_full_backupdir.yaml
+
+---
+
+description:  |
+  test parameters for xtrabackup stream full to backupdir seed method
+
+variables:
+  seedMethod: xtrabackup-stream
+  backupFolder: '%2Ftmp%2Fbkp%2F20180504-103748'
+  databases: ""

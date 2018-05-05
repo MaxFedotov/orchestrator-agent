@@ -1,0 +1,253 @@
+# test_common.tavern.yaml
+
+---
+
+test_name: Seed process using xtrabackup\mysqldump\mydumper
+stages:
+  - name: Run /api/mysql-info on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/mysql-info
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+      body:
+        MySQLVersion: !anystr
+        MySQLDatadirPath: !anystr
+        MySQLBackupdirPath: !anystr
+        IsSlave: !anybool
+        IsMaster: !anybool
+        IsBinlogEnabled: !anybool
+        HasActiveConnections: !anybool
+  - name: Run /api/mysql-databases on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/mysql-databases
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+      body:
+        MySQLDatabases: !anything
+        InnoDBLogSize: !anyint
+  - name: Run /api/mysql-status on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/mysql-status
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+  - name: Run /api/mysql-port on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/mysql-port
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:save_port
+      save:
+        $ext:
+          function: test:save_port
+  - name: Run /api/mysql-du on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/mysql-du
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:validate_response
+  - name: Run /api/mysql-datadir-available-space on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/mysql-datadir-available-space
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:validate_response
+  - name: Run /api/mysql-backupdir-available-space on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/mysql-backupdir-available-space
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:validate_response
+  - name: Run /api/mysql-error-log-tail on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/mysql-error-log-tail
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:validate_response
+  - name: Run /api/mysql-info on targetHost
+    request:
+      url: http://{targetHost}:3002/api/mysql-info
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+      body:
+        MySQLVersion: !anystr
+        MySQLDatadirPath: !anystr
+        MySQLBackupdirPath: !anystr
+        IsSlave: !anybool
+        IsMaster: !anybool
+        IsBinlogEnabled: !anybool
+        HasActiveConnections: !anybool
+  - name: Run /api/mysql-databases on targetHost
+    request:
+      url: http://{targetHost}:3002/api/mysql-databases
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+      body:
+        MySQLDatabases: !anything
+        InnoDBLogSize: !anyint
+  - name: Run /api/mysql-status on targetHost
+    request:
+      url: http://{targetHost}:3002/api/mysql-status
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+  - name: Run /api/mysql-port on targetHost
+    request:
+      url: http://{targetHost}:3002/api/mysql-port
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:save_port
+  - name: Run /api/mysql-du on targetHost
+    request:
+      url: http://{targetHost}:3002/api/mysql-du
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:validate_response
+  - name: Run /api/mysql-datadir-available-space on targetHost
+    request:
+      url: http://{targetHost}:3002/api/mysql-datadir-available-space
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:validate_response
+  - name: Run /api/mysql-backupdir-available-space on targetHost
+    request:
+      url: http://{targetHost}:3002/api/mysql-backupdir-available-space
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:validate_response
+  - name: Run /api/mysql-error-log-tail on targetHost
+    request:
+      url: http://{targetHost}:3002/api/mysql-error-log-tail
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:validate_response
+  - name: Start backup process on sourceHost. Run /api/start-local-backup on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/start-local-backup/1/{seedMethod}/{databases}
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+      body:
+        $ext:
+          function: test:save_backupFolder
+      save:
+        $ext:
+          function: test:save_backupFolder
+  - name: Start receiving on targetHost. Run /api/receive-backup on targetHost
+    request:
+      url: http://{targetHost}:3002/api/receive-backup/1/{seedMethod}/{backupFolder}
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+    delay_after: 3  
+  - name: Start sending backup on sourceHost. Run /api/send-local-backup on sourceHost
+    request:
+      url: http://{sourceHost}:3002/api/send-local-backup/1/{targetHost}/{backupFolder}
+      method: GET
+      params:
+        token: "{sourceToken}"
+    response:
+      status_code: 200
+    delay_after: 5
+  - name: Start restoring on targetHost. Run /api/start-restore on targetHost
+    request:
+      url: http://{targetHost}:3002/api/start-restore/1/{seedMethod}/{sourceHost}/{port}/{backupFolder}/{databases}
+      method: GET
+      params:
+        token: "{targetToken}"
+    response:
+      status_code: 200
+#  - name: Start cleanup on sourceHost. Run /api/cleanup on sourceHost
+#    request:
+#      url: http://{sourceHost}:3002/api/cleanup/1
+#      method: GET
+#      params:
+#        token: "{sourceToken}"
+#    response:
+#      status_code: 200
+#  - name: Start cleanup on target. Run /api/cleanup on target
+#    request:
+#      url: http://{targetHost}:3002/api/cleanup/1
+#      method: GET
+#      params:
+#        token: "{targetToken}"
+#    response:
+#      status_code: 200
+
+
+
+        
+
+
+
+

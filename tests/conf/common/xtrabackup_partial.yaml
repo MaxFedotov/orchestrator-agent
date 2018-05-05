@@ -1,0 +1,10 @@
+# xtrabackup_partial.yaml
+
+---
+
+description:  |
+  test parameters for xtrabackup partial seed method
+
+variables:
+  seedMethod: xtrabackup
+  databases: "sakila,world"

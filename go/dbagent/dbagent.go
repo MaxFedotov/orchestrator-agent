@@ -18,6 +18,7 @@ const (
 type MySQLInfo struct {
 	MySQLVersion         string
 	MySQLDatadirPath     string
+	MySQLBackupdirPath   string
 	IsSlave              bool
 	IsMaster             bool
 	IsBinlogEnabled      bool
@@ -33,6 +34,7 @@ func OpenConnection() (*sql.DB, error) {
 		"mysql",
 	)
 	db, _, err := sqlutils.GetDB(mysqlURI)
+	db.SetMaxIdleConns(0)
 	if err != nil {
 		return nil, log.Errore(err)
 	}
@@ -163,6 +165,7 @@ func getMySQLDatadirPath() (MySQLDatadirPath string, err error) {
 func GetMySQLInfo() (Info MySQLInfo, err error) {
 	Info.MySQLVersion, err = GetMySQLVersion()
 	Info.MySQLDatadirPath, err = getMySQLDatadirPath()
+	Info.MySQLBackupdirPath = config.Config.MySQLBackupDir
 	Info.IsSlave, err = isSlave()
 	Info.IsMaster, err = isMaster()
 	Info.IsBinlogEnabled, err = isBinlogEnabled()
@@ -267,8 +270,9 @@ func GenerateBackupForUsers(users []string) (backup string, err error) {
 				res, err := sqlutils.QueryResultData(db, query)
 				if err != nil {
 					log.Errore(err)
+				} else {
+					backup += res[0][0].String + ";\n"
 				}
-				backup += res[0][0].String + ";\n"
 			}
 
 		}
@@ -277,9 +281,10 @@ func GenerateBackupForUsers(users []string) (backup string, err error) {
 			res, err := sqlutils.QueryResultData(db, query)
 			if err != nil {
 				log.Errore(err)
-			}
-			for r := range res {
-				backup += res[r][0].String + ";\n"
+			} else {
+				for r := range res {
+					backup += res[r][0].String + ";\n"
+				}
 			}
 		}
 	}
@@ -297,6 +302,11 @@ func ManageReplicationUser() error {
 	if !HasGrant(config.Config.MySQLReplicationUser, "Repl_slave_priv") {
 		err = GrantUser(config.Config.MySQLReplicationUser, "%", "REPLICATION SLAVE", "*.*")
 	}
+	query := fmt.Sprintf(`FLUSH PRIVILEGES;`)
+	_, err = ExecuteQuery(query)
+	if err != nil {
+		return log.Errore(err)
+	}
 	return err
 }
 
@@ -310,7 +320,18 @@ func StartSlave(sourceHost string, sourcePort int, logFile string, position stri
 		}
 	}
 	if len(gtidPurged) > 0 {
-		query := fmt.Sprintf(`SET @@GLOBAL.GTID_PURGED='%s';`, gtidPurged)
+		// as we are restoring new slave and if we have GTIDs we may have @@GLOBAL.GTID_EXECUTED not empty and we won't be able to set @@GLOBAL.GTID_PURGED
+		// so we need to do RESET MASTER on slave
+		query := `RESET MASTER;`
+		if _, err = ExecuteQuery(query); err != nil {
+			return log.Errore(err)
+		}
+		query = fmt.Sprintf(`SET @@GLOBAL.GTID_PURGED='%s';`, gtidPurged)
+		_, err = ExecuteQuery(query)
+		if err != nil {
+			return log.Errore(err)
+		}
+		query = `CHANGE MASTER TO MASTER_AUTO_POSITION = 1;`
 		_, err = ExecuteQuery(query)
 		if err != nil {
 			return log.Errore(err)

@@ -1,0 +1,11 @@
+# xtrabackup_stream_partial_backupdir.yaml.yaml
+
+---
+
+description:  |
+  test parameters for xtrabackup stream partial to backupdir seed method
+
+variables:
+  seedMethod: xtrabackup-stream
+  backupFolder: '%2Ftmp%2Fbkp%2F20180504-103748'
+  databases: "sakila,world"

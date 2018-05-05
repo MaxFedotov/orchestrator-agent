@@ -1,0 +1,10 @@
+# xtrabackup_full.yaml
+
+---
+
+description:  |
+  test parameters for xtrabackup full seed method
+
+variables:
+  seedMethod: xtrabackup
+  databases: ""

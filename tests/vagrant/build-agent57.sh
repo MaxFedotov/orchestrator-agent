@@ -85,9 +85,14 @@ mysql -uroot -pprivetserver -e "grant all privileges on *.* to 'root'@'localhost
 
 echo "Creating orc_client_user and other"
 cat <<-EOF | mysql -uroot -pprivetserver
-GRANT ALL PRIVILEGES ON *.* TO 'orc_client_user'@'localhost' IDENTIFIED BY 'orc_client_password';
-GRANT SELECT, DELETE ON *.* TO 'master_user_1'@'localhost' IDENTIFIED BY 'privetserver';
-GRANT UPDATE ON *.* TO 'master_user_2'@'localhost' IDENTIFIED BY 'privetserver';
+USE mysql;
+CREATE USER IF NOT EXISTS 'orc_client_user'@'localhost' IDENTIFIED BY 'orc_client_password';
+CREATE USER IF NOT EXISTS 'master_user_1'@'localhost' IDENTIFIED BY 'privetserver';
+CREATE USER IF NOT EXISTS 'master_user_2'@'localhost' IDENTIFIED BY 'privetserver';
+GRANT ALL PRIVILEGES ON *.* TO 'orc_client_user'@'localhost' WITH GRANT OPTION;
+GRANT SELECT, DELETE ON *.* TO 'master_user_1'@'localhost';
+GRANT UPDATE ON *.* TO 'master_user_2'@'localhost';
+FLUSH PRIVILEGES;
 EOF
 
 echo "Updating /etc/hosts"
@@ -102,20 +107,32 @@ cp /vagrant/mysql_cnf/.my.cnf ~/.my.cnf
 if [ "$HOSTNAME" = "orch-agent1" ] ; then
   echo "Creating databases"
   mysql -uroot -pprivetserver < /vagrant/mysql_db/sakila.sql
-  mysql -uroot -pprivetserver < /vagrant/mysql_db/world_x.sql
+  mysql -uroot -pprivetserver < /vagrant/mysql_db/akila.sql
   mysql -uroot -pprivetserver < /vagrant/mysql_db/world.sql
 fi
 
 if [ "$HOSTNAME" = "orch-agent2" ] ; then
   echo "Creating individual users"
   cat <<-EOF | mysql -uroot -pprivetserver
-  GRANT SELECT, DELETE ON *.* TO 'slave_user_1'@'localhost' IDENTIFIED BY 'privetserver';
-  GRANT UPDATE ON *.* TO 'slave_user_2'@'localhost' IDENTIFIED BY 'privetserver';
+  USE mysql;
+  CREATE USER IF NOT EXISTS 'slave_user_1'@'localhost' IDENTIFIED BY 'privetserver';
+  CREATE USER IF NOT EXISTS 'slave_user_2'@'localhost' IDENTIFIED BY 'privetserver';
+  GRANT SELECT, DELETE ON *.* TO 'slave_user_1'@'localhost';
+  GRANT UPDATE ON *.* TO 'slave_user_2'@'localhost';
+  FLUSH PRIVILEGES;
 EOF
 fi
 
 echo "Starting orchestrator-agent"
 service orchestrator-agent start
+
+sleep 5s
+
+echo "Saving debug token"
+cat /var/log/orchestrator-agent.log | grep "DEBUG Process token" | cut -d" " -f 6 | xargs echo > /vagrant/$HOSTNAME.token.txt
+
+echo "Removing validate_password plugin"
+mysql -uroot -pprivetserver -e "uninstall plugin validate_password;"
 
 if [[ -e /vagrant/db-post-install.sh ]]; then
   bash /vagrant/db-post-install.sh

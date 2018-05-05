@@ -26,7 +26,7 @@ sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
 echo "Creating directory for backups"
 mkdir /tmp/bkp/
 
-echo "Installing Percona Server 5.7"
+echo "Installing Percona Server 5.6"
 yum -d 0 -y install http://www.percona.com/downloads/percona-release/redhat/0.1-4/percona-release-0.1-4.noarch.rpm
 yum -d 0 -y install Percona-Server-server-56 Percona-Server-shared-56 Percona-Server-client-56 Percona-Server-shared-compat percona-toolkit percona-xtrabackup-24 vim-enhanced
 
@@ -77,17 +77,16 @@ echo "SLEEPING FOR 30 SECONDS to LET Percona Server start"
 sleep 30s
 
 echo "Updating password for root"
-grep 'temporary password' /var/log/mysqld.log | grep -o ': .*$' | cut -c3-
-PSWD=$(grep 'temporary password' /var/log/mysqld.log | grep -o ': .*$' | cut -c3-)
-mysql -ss -uroot -p$PSWD -e "SET GLOBAL validate_password_policy=LOW;" --connect-expired-password
-mysql -ss -uroot -p$PSWD -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'privetserver'; FLUSH PRIVILEGES;" --connect-expired-password
+/usr/bin/mysqladmin -u root password 'privetserver'
 mysql -uroot -pprivetserver -e "grant all privileges on *.* to 'root'@'localhost'"
 
 echo "Creating orc_client_user and other"
 cat <<-EOF | mysql -uroot -pprivetserver
-GRANT ALL PRIVILEGES ON *.* TO 'orc_client_user'@'localhost' IDENTIFIED BY 'orc_client_password';
+USE mysql;
+GRANT ALL PRIVILEGES ON *.* TO 'orc_client_user'@'localhost' IDENTIFIED BY 'orc_client_password' WITH GRANT OPTION;
 GRANT SELECT, DELETE ON *.* TO 'master_user_1'@'localhost' IDENTIFIED BY 'privetserver';
 GRANT UPDATE ON *.* TO 'master_user_2'@'localhost' IDENTIFIED BY 'privetserver';
+FLUSH PRIVILEGES;
 EOF
 
 echo "Updating /etc/hosts"
@@ -102,20 +101,30 @@ cp /vagrant/mysql_cnf/.my.cnf ~/.my.cnf
 if [ "$HOSTNAME" = "orch-agent1" ] ; then
   echo "Creating databases"
   mysql -uroot -pprivetserver < /vagrant/mysql_db/sakila.sql
-  mysql -uroot -pprivetserver < /vagrant/mysql_db/world_x.sql
+  mysql -uroot -pprivetserver < /vagrant/mysql_db/akila.sql
   mysql -uroot -pprivetserver < /vagrant/mysql_db/world.sql
 fi
 
 if [ "$HOSTNAME" = "orch-agent2" ] ; then
   echo "Creating individual users"
   cat <<-EOF | mysql -uroot -pprivetserver
+  USE mysql;
   GRANT SELECT, DELETE ON *.* TO 'slave_user_1'@'localhost' IDENTIFIED BY 'privetserver';
   GRANT UPDATE ON *.* TO 'slave_user_2'@'localhost' IDENTIFIED BY 'privetserver';
+  FLUSH PRIVILEGES;
 EOF
 fi
 
 echo "Starting orchestrator-agent"
 service orchestrator-agent start
+
+sleep 5s
+
+echo "Saving debug token"
+cat /var/log/orchestrator-agent.log | grep "DEBUG Process token" | cut -d" " -f 6 | xargs echo > /vagrant/$HOSTNAME.token.txt
+
+echo "Removing validate_password plugin"
+mysql -uroot -pprivetserver -e "uninstall plugin validate_password;"
 
 if [[ -e /vagrant/db-post-install.sh ]]; then
   bash /vagrant/db-post-install.sh
