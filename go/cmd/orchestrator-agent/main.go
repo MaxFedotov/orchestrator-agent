@@ -44,7 +44,7 @@ func acceptSignal() {
 func main() {
 	configFile := flag.String("config", "", "config file name")
 	verbose := flag.Bool("verbose", true, "verbose")
-	debug := flag.Bool("debug", true, "debug mode (very verbose)")
+	debug := flag.Bool("debug", false, "debug mode (very verbose)")
 	stack := flag.Bool("stack", false, "add stack trace upon error")
 	flag.Parse()
 
