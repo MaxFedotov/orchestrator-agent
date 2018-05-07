@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/openark/golib/log"
@@ -248,37 +249,62 @@ func HasGrant(username string, grant string) (HasGrant bool) {
 }
 
 func CreateUser(username string, host string, password string) error {
-	_, err := ExecuteQuery(`CREATE USER ?@? IDENTIFIED BY ?;`, username, host, password)
+	_, err := ExecuteQuery(`CREATE USER IF NOT EXISTS ?@? IDENTIFIED BY ?;`, username, host, password)
 	return err
 }
 
-func GrantUser(username string, host string, grant string, object string) error {
-	query := fmt.Sprintf("GRANT %s ON %s TO '%s'@'%s';", grant, object, username, host)
+func GrantUser(username string, host string, grant string, object string, password string) error {
+	var query string
+	if len(password) > 0 {
+		query = fmt.Sprintf("GRANT %s ON %s TO '%s'@'%s' IDENTIFIED BY '%s';", grant, object, username, host, password)
+	} else {
+		query = fmt.Sprintf("GRANT %s ON %s TO '%s'@'%s';", grant, object, username, host)
+	}
 	_, err := ExecuteQuery(query)
 	return err
 }
 
-func GenerateBackupForUsers(users []string) (backup string, err error) {
+func ManageReplicationUser() error {
+	var err error
 	version, err := GetMySQLVersion()
 	if err != nil {
-		return "", log.Errore(err)
+		log.Errore(err)
 	}
-	if db, err := OpenConnection(); err == nil {
+	if !UserExists(config.Config.MySQLReplicationUser) {
 		if version == "5.7" {
-			for _, user := range users {
-				query := fmt.Sprintf("SHOW CREATE USER %s", user)
-				res, err := sqlutils.QueryResultData(db, query)
-				if err != nil {
-					log.Errore(err)
-				} else {
-					backup += res[0][0].String + ";\n"
-				}
+			err = CreateUser(config.Config.MySQLReplicationUser, "%", config.Config.MySQLReplicationPassword)
+			if err != nil {
+				return err
 			}
-
+		} else {
+			err = GrantUser(config.Config.MySQLReplicationUser, "%", "REPLICATION SLAVE", "*.*", config.Config.MySQLReplicationPassword)
 		}
+	}
+	if !HasGrant(config.Config.MySQLReplicationUser, "Repl_slave_priv") {
+		err = GrantUser(config.Config.MySQLReplicationUser, "%", "REPLICATION SLAVE", "*.*", "")
+	}
+	query := fmt.Sprintf(`FLUSH PRIVILEGES;`)
+	_, err = ExecuteQuery(query)
+	if err != nil {
+		return log.Errore(err)
+	}
+	return err
+}
+
+func GenerateBackupForUsers(users []string) (backup string, err error) {
+	if db, err := OpenConnection(); err == nil {
 		for _, user := range users {
-			query := fmt.Sprintf("SHOW GRANTS FOR %s", user)
+			// small hack cos MySQL 5.6 doesn't have DROP USER IF EXISTS. USAGE is synonym for "no privileges"
+			backup += fmt.Sprintf("GRANT USAGE ON *.* TO %s IDENTIFIED BY 'temporary_password'; DROP USER %s;", user, user)
+			query := fmt.Sprintf("SHOW CREATE USER %s", user)
 			res, err := sqlutils.QueryResultData(db, query)
+			if err != nil {
+				log.Errore(err)
+			} else {
+				backup += res[0][0].String + ";\n"
+			}
+			query = fmt.Sprintf("SHOW GRANTS FOR %s", user)
+			res, err = sqlutils.QueryResultData(db, query)
 			if err != nil {
 				log.Errore(err)
 			} else {
@@ -289,25 +315,6 @@ func GenerateBackupForUsers(users []string) (backup string, err error) {
 		}
 	}
 	return backup, err
-}
-
-func ManageReplicationUser() error {
-	var err error
-	if !UserExists(config.Config.MySQLReplicationUser) {
-		err = CreateUser(config.Config.MySQLReplicationUser, "%", config.Config.MySQLReplicationPassword)
-		if err != nil {
-			return err
-		}
-	}
-	if !HasGrant(config.Config.MySQLReplicationUser, "Repl_slave_priv") {
-		err = GrantUser(config.Config.MySQLReplicationUser, "%", "REPLICATION SLAVE", "*.*")
-	}
-	query := fmt.Sprintf(`FLUSH PRIVILEGES;`)
-	_, err = ExecuteQuery(query)
-	if err != nil {
-		return log.Errore(err)
-	}
-	return err
 }
 
 func StartSlave(sourceHost string, sourcePort int, logFile string, position string, gtidPurged string) error {
@@ -348,5 +355,6 @@ func StartSlave(sourceHost string, sourcePort int, logFile string, position stri
 	if err != nil {
 		return log.Errore(err)
 	}
+	time.Sleep(5 * time.Second)
 	return err
 }

@@ -49,10 +49,10 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:save_port
+          function: testfunc:save_port
       save:
         $ext:
-          function: test:save_port
+          function: testfunc:save_port
   - name: Run /api/mysql-du on sourceHost
     request:
       url: http://{sourceHost}:3002/api/mysql-du
@@ -63,7 +63,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:validate_response
+          function: testfunc:validate_response
   - name: Run /api/mysql-datadir-available-space on sourceHost
     request:
       url: http://{sourceHost}:3002/api/mysql-datadir-available-space
@@ -74,7 +74,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:validate_response
+          function: testfunc:validate_response
   - name: Run /api/mysql-backupdir-available-space on sourceHost
     request:
       url: http://{sourceHost}:3002/api/mysql-backupdir-available-space
@@ -85,7 +85,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:validate_response
+          function: testfunc:validate_response
   - name: Run /api/mysql-error-log-tail on sourceHost
     request:
       url: http://{sourceHost}:3002/api/mysql-error-log-tail
@@ -96,7 +96,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:validate_response
+          function: testfunc:validate_response
   - name: Run /api/mysql-info on targetHost
     request:
       url: http://{targetHost}:3002/api/mysql-info
@@ -142,7 +142,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:save_port
+          function: testfunc:save_port
   - name: Run /api/mysql-du on targetHost
     request:
       url: http://{targetHost}:3002/api/mysql-du
@@ -153,7 +153,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:validate_response
+          function: testfunc:validate_response
   - name: Run /api/mysql-datadir-available-space on targetHost
     request:
       url: http://{targetHost}:3002/api/mysql-datadir-available-space
@@ -164,7 +164,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:validate_response
+          function: testfunc:validate_response
   - name: Run /api/mysql-backupdir-available-space on targetHost
     request:
       url: http://{targetHost}:3002/api/mysql-backupdir-available-space
@@ -175,7 +175,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:validate_response
+          function: testfunc:validate_response
   - name: Run /api/mysql-error-log-tail on targetHost
     request:
       url: http://{targetHost}:3002/api/mysql-error-log-tail
@@ -186,7 +186,7 @@ stages:
       status_code: 200
       body:
         $ext:
-          function: test:validate_response
+          function: testfunc:validate_response
   - name: Start receiving on targetHost. Run /api/receive-backup on targetHost
     request:
       url: http://{targetHost}:3002/api/receive-backup/1/{seedMethod}/{backupFolder}

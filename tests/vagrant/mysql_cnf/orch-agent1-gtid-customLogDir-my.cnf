@@ -4,7 +4,7 @@ socket=/var/lib/mysql/mysql.sock
 log-error=/var/log/mysqld.log
 pid-file=/var/run/mysqld/mysqld.pid
 user=mysql
-innodb_log_group_home_dir=/tmp/innodblog/
+innodb_log_group_home_dir=/var/lib/innodblog
 port=3306
 
 # Disabling symbolic-links is recommended to prevent assorted security risks

@@ -51,7 +51,7 @@ const (
 	mysqlUserBackupFileName       = "mysql_users_backup.sql"
 	mydumperMetadataFile          = "metadata"
 	xtrabackupMetadataFile        = "xtrabackup_binlog_info"
-	mysqlRestartSleepInterval     = 30
+	mysqlRestartSleepInterval     = 40
 	mysqlBackupDatadirName        = "mysql_datadir_backup.tar.gz"
 )
 
@@ -838,12 +838,12 @@ func StartLocalBackup(seedId string, seedMethod string, databases string) (Backu
 		}
 		//if we don't already have mysql database in databases, add it
 		if !strings.Contains(databases, "mysql") {
-			databases += ", mysql"
+			databases += ",mysql"
 		}
 		//and if we are on 5.7 we need to add sys db because sometimes during mysql_upgrade run we can get errors like mysql_upgrade: [ERROR] 1813: Tablespace '`sys`.`sys_config`' exists
 		version, _ := dbagent.GetMySQLVersion()
 		if version == "5.7" && !strings.Contains(databases, "sys") {
-			databases += ", sys"
+			databases += ",sys"
 		}
 	}
 	if err := dbagent.ManageReplicationUser(); err != nil {
@@ -913,6 +913,13 @@ func backupMySQLUsers(seedId string) (err error) {
 				log.Debug("Backing up MySQL users")
 			})
 	}
+	cmd := fmt.Sprintf("echo 'FLUSH PRIVILEGES;' >> %s", path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
+	err = commandRun(
+		fmt.Sprintf(cmd),
+		func(cmd *exec.Cmd) {
+			activeCommands[seedId] = cmd
+			log.Debug("Adding FLUSH PRIVILEGES command to MySQL users backup")
+		})
 	return err
 }
 
@@ -924,7 +931,6 @@ func restoreMySQLUsers(seedId string, backupFolder string) error {
 			activeCommands[seedId] = cmd
 			log.Debug("Restoring MySQL users")
 		})
-
 	return log.Errore(err)
 }
 
@@ -952,6 +958,9 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 		if err := MySQLStart(); err != nil {
 			return log.Errore(err)
 		}
+	}
+	if err := dbagent.ManageReplicationUser(); err != nil {
+		return log.Errore(err)
 	}
 	if backupFolder == config.Config.MySQLDataDir && seedMethod == "xtrabackup-stream" {
 		if len(config.Config.MySQLInnoDBLogDir) == 0 {
@@ -1099,8 +1108,11 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 				return log.Errore(err)
 			}
 		}
-		if err := MySQLRestart(); err != nil {
-			return log.Errore(err)
+		// we do not need to restart MySQL in case of xtrabackup-stream to datadir as it's already stopped
+		if seedMethod != "xtrabackup-stream" && backupFolder != config.Config.MySQLDataDir {
+			if err := MySQLRestart(); err != nil {
+				return log.Errore(err)
+			}
 		}
 	}
 	// Backup users if we are not streaming to datadir. In case of streaming to datadir users were backuped when we recieved backup
@@ -1120,10 +1132,6 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 			return log.Errore(err)
 		}
 		if err := dbagent.ManageReplicationUser(); err != nil {
-			return log.Errore(err)
-		}
-		// restore users
-		if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
 		if err := dbagent.StartSlave(sourceHost, sourcePort, "", "", ""); err != nil {
@@ -1151,10 +1159,6 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 			return log.Errore(err)
 		}
 		if err := dbagent.SetMySQLSql_mode(sqlMode); err != nil {
-			return log.Errore(err)
-		}
-		// restore users
-		if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
 		if err := dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged); err != nil {
@@ -1189,6 +1193,9 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 			if err := copyXtrabackup(seedId, backupFolder); err != nil {
 				return log.Errore(err)
 			}
+			if err := DeleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
+				return log.Errore(err)
+			}
 		}
 		if err := changeDatadirPermissions(seedId); err != nil {
 			return log.Errore(err)
@@ -1207,13 +1214,13 @@ func startRestore(seedId string, seedMethod string, sourceHost string, sourcePor
 		if err := dbagent.ManageReplicationUser(); err != nil {
 			return log.Errore(err)
 		}
-		// restore users
-		if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
-			return log.Errore(err)
-		}
 		if err := dbagent.StartSlave(sourceHost, sourcePort, logFile, position, gtidPurged); err != nil {
 			return log.Errore(err)
 		}
+	}
+	// restore users
+	if err := restoreMySQLUsers(seedId, backupFolder); err != nil {
+		return log.Errore(err)
 	}
 	return err
 }

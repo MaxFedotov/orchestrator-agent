@@ -43,8 +43,8 @@ func acceptSignal() {
 // main is the application's entry point. It will either spawn a CLI or HTTP itnerfaces.
 func main() {
 	configFile := flag.String("config", "", "config file name")
-	verbose := flag.Bool("verbose", false, "verbose")
-	debug := flag.Bool("debug", false, "debug mode (very verbose)")
+	verbose := flag.Bool("verbose", true, "verbose")
+	debug := flag.Bool("debug", true, "debug mode (very verbose)")
 	stack := flag.Bool("stack", false, "add stack trace upon error")
 	flag.Parse()
 

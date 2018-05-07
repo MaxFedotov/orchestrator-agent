@@ -11,7 +11,8 @@
         PYTHONPATH=$(pwd) tavern-ci --stdout --tavern-global-cfg common.yaml conf/common/mydumper_full.yaml -- test_common.tavern.yaml
     b) stream tests (use files located in conf/stream/ and test_stream.tavern.yaml to run different tests):
         PYTHONPATH=$(pwd) tavern-ci --stdout --tavern-global-cfg common.yaml conf/stream/xtrabackup_stream_partial_backupdir.yaml -- test_stream.tavern.yaml
-7. restore snapshot if you want to run different test with current VM setup:
+7. run ./check.sh to verify replication
+8. restore snapshot if you want to run different test with current VM setup:
     vagrant snapshot restore orch-agent1
-8. destroy vagrant VMs:
+9. destroy vagrant VMs:
     vagrant --mysql-version=57 --mysql-replication=gtid --orchagent-config=backupolddatadir destroy

@@ -40,7 +40,9 @@ find -name "mydumper-*.rpm" | xargs yum -d 0 -y  install @
 
 echo "Copying my.cnf"
 if [ "$customLogDir" = 1 ] ; then
-  mkdir /tmp/innodblog/
+  setenforce 0
+  mkdir /var/lib/innodblog
+  chown -R mysql:mysql /var/lib/innodblog
   if [[ -e "/vagrant/mysql_cnf/${HOSTNAME}-"$mysqlReplication"-customLogDir-my.cnf" ]]; then
     rm -f /etc/my.cnf
     cp /vagrant/mysql_cnf/${HOSTNAME}-"$mysqlReplication"-customLogDir-my.cnf /etc/my.cnf
@@ -73,27 +75,65 @@ fi
 echo "Starting MySQL"
 service mysql start
 
-echo "SLEEPING FOR 30 SECONDS to LET Percona Server start"
-sleep 30s
+echo "SLEEPING FOR 20 SECONDS to LET Percona Server start"
+sleep 20s
 
 echo "Updating password for root"
 grep 'temporary password' /var/log/mysqld.log | grep -o ': .*$' | cut -c3-
 PSWD=$(grep 'temporary password' /var/log/mysqld.log | grep -o ': .*$' | cut -c3-)
 mysql -ss -uroot -p$PSWD -e "SET GLOBAL validate_password_policy=LOW;" --connect-expired-password
-mysql -ss -uroot -p$PSWD -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'privetserver'; FLUSH PRIVILEGES;" --connect-expired-password
-mysql -uroot -pprivetserver -e "grant all privileges on *.* to 'root'@'localhost'"
 
-echo "Creating orc_client_user and other"
-cat <<-EOF | mysql -uroot -pprivetserver
-USE mysql;
-CREATE USER IF NOT EXISTS 'orc_client_user'@'localhost' IDENTIFIED BY 'orc_client_password';
-CREATE USER IF NOT EXISTS 'master_user_1'@'localhost' IDENTIFIED BY 'privetserver';
-CREATE USER IF NOT EXISTS 'master_user_2'@'localhost' IDENTIFIED BY 'privetserver';
-GRANT ALL PRIVILEGES ON *.* TO 'orc_client_user'@'localhost' WITH GRANT OPTION;
-GRANT SELECT, DELETE ON *.* TO 'master_user_1'@'localhost';
-GRANT UPDATE ON *.* TO 'master_user_2'@'localhost';
-FLUSH PRIVILEGES;
+if [ "$HOSTNAME" = "orch-agent1" ] ; then
+  mysql -ss -uroot -p$PSWD -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'privetserver'; FLUSH PRIVILEGES;" --connect-expired-password
+  mysql -uroot -pprivetserver -e "grant all privileges on *.* to 'root'@'localhost'"
+
+  echo "Creating orc_client_user and other"
+  cat <<-EOF | mysql -uroot -pprivetserver
+  USE mysql;
+  CREATE USER IF NOT EXISTS 'orc_client_user'@'localhost' IDENTIFIED BY 'orc_client_password';
+  CREATE USER IF NOT EXISTS 'user_1'@'localhost' IDENTIFIED BY 'privetserver';
+  CREATE USER IF NOT EXISTS 'user_2'@'localhost' IDENTIFIED BY 'privetserver';
+  GRANT ALL PRIVILEGES ON *.* TO 'orc_client_user'@'localhost' WITH GRANT OPTION;
+  GRANT PROXY ON ''@'' TO 'orc_client_user'@'localhost' WITH GRANT OPTION;
+  GRANT SELECT, DELETE ON *.* TO 'user_1'@'localhost';
+  GRANT UPDATE ON *.* TO 'user_2'@'localhost';
+  FLUSH PRIVILEGES;
 EOF
+
+  echo "Copying ~/.my.cnf"
+  cp /vagrant/mysql_cnf/.my.cnf.orch-agent1 ~/.my.cnf
+
+  echo "Removing validate_password plugin"
+  mysql -uroot -pprivetserver -e "uninstall plugin validate_password;"
+fi 
+
+if [ "$HOSTNAME" = "orch-agent2" ] ; then
+  mysql -ss -uroot -p$PSWD -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'privetserver1'; FLUSH PRIVILEGES;" --connect-expired-password
+  mysql -uroot -pprivetserver1 -e "grant all privileges on *.* to 'root'@'localhost'"
+
+  echo "Creating orc_client_user and other"
+  cat <<-EOF | mysql -uroot -pprivetserver1
+  USE mysql;
+  CREATE USER IF NOT EXISTS 'orc_client_user'@'localhost' IDENTIFIED BY 'orc_client_password';
+  CREATE USER IF NOT EXISTS 'user_1'@'localhost' IDENTIFIED BY 'privetserver1';
+  CREATE USER IF NOT EXISTS 'user_2'@'localhost' IDENTIFIED BY 'privetserver1';
+  CREATE USER IF NOT EXISTS 'slave_user_1'@'localhost' IDENTIFIED BY 'privetserver1';
+  CREATE USER IF NOT EXISTS 'slave_user_2'@'localhost' IDENTIFIED BY 'privetserver1';
+  GRANT ALL PRIVILEGES ON *.* TO 'orc_client_user'@'localhost' WITH GRANT OPTION;
+  GRANT PROXY ON ''@'' TO 'orc_client_user'@'localhost' WITH GRANT OPTION;
+  GRANT SELECT, DELETE ON *.* TO 'user_1'@'localhost';
+  GRANT UPDATE ON *.* TO 'user_2'@'localhost';
+  GRANT SELECT, DELETE ON *.* TO 'slave_user_1'@'localhost';
+  GRANT UPDATE ON *.* TO 'slave_user_2'@'localhost';
+  FLUSH PRIVILEGES;
+EOF
+
+  echo "Copying ~/.my.cnf"
+  cp /vagrant/mysql_cnf/.my.cnf.orch-agent2 ~/.my.cnf
+
+  echo "Removing validate_password plugin"
+  mysql -uroot -pprivetserver1 -e "uninstall plugin validate_password;"
+fi
 
 echo "Updating /etc/hosts"
 cat <<-EOF >> /etc/hosts
@@ -101,26 +141,11 @@ cat <<-EOF >> /etc/hosts
   192.168.58.202   orch-agent2
 EOF
 
-echo "Copying ~/.my.cnf"
-cp /vagrant/mysql_cnf/.my.cnf ~/.my.cnf
-
 if [ "$HOSTNAME" = "orch-agent1" ] ; then
   echo "Creating databases"
   mysql -uroot -pprivetserver < /vagrant/mysql_db/sakila.sql
   mysql -uroot -pprivetserver < /vagrant/mysql_db/akila.sql
   mysql -uroot -pprivetserver < /vagrant/mysql_db/world.sql
-fi
-
-if [ "$HOSTNAME" = "orch-agent2" ] ; then
-  echo "Creating individual users"
-  cat <<-EOF | mysql -uroot -pprivetserver
-  USE mysql;
-  CREATE USER IF NOT EXISTS 'slave_user_1'@'localhost' IDENTIFIED BY 'privetserver';
-  CREATE USER IF NOT EXISTS 'slave_user_2'@'localhost' IDENTIFIED BY 'privetserver';
-  GRANT SELECT, DELETE ON *.* TO 'slave_user_1'@'localhost';
-  GRANT UPDATE ON *.* TO 'slave_user_2'@'localhost';
-  FLUSH PRIVILEGES;
-EOF
 fi
 
 echo "Starting orchestrator-agent"
@@ -130,9 +155,6 @@ sleep 5s
 
 echo "Saving debug token"
 cat /var/log/orchestrator-agent.log | grep "DEBUG Process token" | cut -d" " -f 6 | xargs echo > /vagrant/$HOSTNAME.token.txt
-
-echo "Removing validate_password plugin"
-mysql -uroot -pprivetserver -e "uninstall plugin validate_password;"
 
 if [[ -e /vagrant/db-post-install.sh ]]; then
   bash /vagrant/db-post-install.sh
