@@ -84,7 +84,7 @@ func main() {
 		log.Errore(err)
 	}
 
-	go config.WatchConf()
+	go config.WatchMySQLConf()
 
 	go acceptSignal()
 

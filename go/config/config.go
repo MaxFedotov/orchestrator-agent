@@ -19,7 +19,7 @@ package config
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
+	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-ini/ini"
@@ -79,6 +79,7 @@ type Configuration struct {
 	MyDumperParallelThreads            int               // Number of threads MyDumper\MyLoader will use for dumping and restoring data
 	MyDumperRowsChunkSize              int               // Split table into chunks of this many rows. 0 - unlimited
 	CompressLogicalBackup              bool              // Compress output mydumper/mysqldump files
+	sync.RWMutex
 }
 
 var Config = NewConfiguration()
@@ -143,6 +144,8 @@ func NewConfiguration() *Configuration {
 // read reads configuration from given file, or silently skips if the file does not exist.
 // If the file does exist, then it is expected to be in valid JSON format or the function bails out.
 func readJSON(fileName string) (*Configuration, error) {
+	Config.Lock()
+	defer Config.Unlock()
 	file, err := os.Open(fileName)
 	if err == nil {
 		decoder := json.NewDecoder(file)
@@ -162,51 +165,56 @@ func readJSON(fileName string) (*Configuration, error) {
 // read reads configuration from given file, or silently skips if the file does not exist.
 // If the file does exist, then it is expected to be in valid INI format or the function bails out.
 func readINI(fileName string) (*Configuration, error) {
+	Config.Lock()
+	defer Config.Unlock()
 	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, fileName)
-	if err == nil {
-		sec := cfg.Section("mysqld")
-		if !sec.HasKey("port") {
-			log.Fatal("Cannot read port from config file:", fileName, err)
-		}
-		if !sec.HasKey("datadir") {
-			log.Fatal("Cannot read datadir from config file:", fileName)
-		}
-		if sec.Haskey("log-error") {
-			Config.MySQLErrorLog = sec.Key("log-error").String()
-		} else {
-			Config.MySQLErrorLog = sec.Key("log_error").String()
-		}
-		Config.MySQLPort, _ = sec.Key("port").Int()
-		Config.MySQLDataDir = sec.Key("datadir").String()
-		Config.MySQLInnoDBLogDir = sec.Key("innodb_log_group_home_dir").String()
-		if _, ok := confFiles["MySQL"]; !ok {
-			confFiles["MySQL"] = fileName
-		}
-		log.Infof("Read config: %s", fileName)
+	if err != nil {
+		return Config, err
 	}
+	sec := cfg.Section("mysqld")
+	if !sec.HasKey("port") {
+		log.Fatal("Cannot read port from config file:", fileName)
+	}
+	if !sec.HasKey("datadir") {
+		log.Fatal("Cannot read datadir from config file:", fileName)
+	}
+	if sec.Haskey("log-error") {
+		Config.MySQLErrorLog = sec.Key("log-error").String()
+	} else {
+		Config.MySQLErrorLog = sec.Key("log_error").String()
+	}
+	Config.MySQLPort, _ = sec.Key("port").Int()
+	Config.MySQLDataDir = sec.Key("datadir").String()
+	Config.MySQLInnoDBLogDir = sec.Key("innodb_log_group_home_dir").String()
+	if _, ok := confFiles["MySQL"]; !ok {
+		confFiles["MySQL"] = fileName
+	}
+	log.Infof("Read config: %s", fileName)
 	return Config, err
 }
 
 // AddKeyToMySQLConfig add new key with value to my.cnf
 func AddKeyToMySQLConfig(key string, value string) error {
 	cfg, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true, AllowShadows: true}, confFiles["MySQL"])
-	if err == nil {
-		sec := cfg.Section("mysqld")
-		if sec.Haskey(key) {
-			existingValues := sec.Key(key).ValueWithShadows()
-			for _, existingValue := range existingValues {
-				if value == existingValue {
-					return nil
-				}
+	if err != nil {
+		return err
+	}
+	sec := cfg.Section("mysqld")
+	if sec.Haskey(key) {
+		existingValues := sec.Key(key).ValueWithShadows()
+		for _, existingValue := range existingValues {
+			if value == existingValue {
+				return nil
 			}
 		}
-		_, err := sec.NewKey(key, value)
-		if err != nil {
-			return log.Errore(err)
-		}
-
-		cfg.SaveTo(confFiles["MySQL"])
 	}
+	_, err = sec.NewKey(key, value)
+	if err != nil {
+		return log.Errore(err)
+	}
+
+	cfg.SaveTo(confFiles["MySQL"])
+
 	return err
 }
 
@@ -235,37 +243,31 @@ func ForceRead(fileName string) *Configuration {
 	return Config
 }
 
-// WatchConf watches for changes in configuration files and rereads them in case of change
-func WatchConf() {
+// WatchMySQLConf watches for changes in MySQL configuration files and rereads them in case of change
+func WatchMySQLConf() {
 	watcher, err := fsnotify.NewWatcher()
-	if err == nil {
-		defer watcher.Close()
-		done := make(chan bool)
-		go func() {
-			for {
-				select {
-				case event := <-watcher.Events:
-					if event.Op&fsnotify.Write == fsnotify.Write {
-						if filepath.Base(event.Name) == "my.cnf" {
-							log.Infof("MySQL config file %s changed. Reloading", event.Name)
-							readINI(event.Name)
-						}
-						if filepath.Base(event.Name) == "orchestrator-agent.conf.json" {
-							log.Infof("Orchestrator agent config file %s changed. Reloading", event.Name)
-							readJSON(event.Name)
-						}
-					}
-				case err := <-watcher.Errors:
-					log.Errorf("Unable to reload config file %s", err)
+	if err != nil {
+		log.Error("Failed to start config watcher")
+	}
+	defer watcher.Close()
+	done := make(chan bool)
+	go func() {
+		for {
+			select {
+			case event := <-watcher.Events:
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					log.Infof("MySQL config file %s changed. Reloading", event.Name)
+					readINI(event.Name)
 				}
-			}
-		}()
-
-		for key := range confFiles {
-			if err := watcher.Add(confFiles[key]); err != nil {
-				log.Errorf("Unable to add watcher for config file %s. Error: %s", key, err)
+			case err := <-watcher.Errors:
+				log.Errorf("Unable to reload config file %s", err)
 			}
 		}
-		<-done
+	}()
+
+	if err := watcher.Add(confFiles["MySQL"]); err != nil {
+		log.Errorf("Unable to add watcher for MySQL config file. Error: %s", err)
 	}
+
+	<-done
 }
