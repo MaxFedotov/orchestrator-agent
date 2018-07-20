@@ -53,8 +53,8 @@ function precheck() {
     ok=1
   fi
 
-  if [[ $(go version | cut -d " " -f 3 | cut -d "." -f 2) -lt 9 ]]; then
-    echo "go version is too low. Must use 1.9 or above"
+  if [[ $(go version | cut -d " " -f 3 | cut -d "." -f 2) -lt 5 ]]; then
+    echo "go version is too low. Must use 1.5 or above"
     ok=1
   fi
 
