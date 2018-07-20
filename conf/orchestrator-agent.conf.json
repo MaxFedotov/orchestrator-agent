@@ -15,7 +15,7 @@
     "ReceiveSeedDataCommand":       "echo 'not implemented here'",
     "SendSeedDataCommand":          "echo 'not implemented here'",
     "PostCopyCommand":              "echo 'post copy'",
-    "HTTPPort": 3002,
+    "HTTPPort": 3004,
     "HTTPAuthUser": "",
     "HTTPAuthPassword": "",
     "UseSSL": false,

@@ -97,45 +97,6 @@ func SetMySQLSql_mode(sqlMode string) error {
 	return err
 }
 
-func isBinlogEnabled() (IsBinlogEnabled bool, err error) {
-	query := `SHOW VARIABLES LIKE 'log_bin';`
-	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
-		IsBinlogEnabled = (m.GetString("Value") == "ON")
-		return nil
-	})
-	if err != nil {
-		log.Errore(err)
-	}
-	return IsBinlogEnabled, err
-}
-
-func isSlave() (IsSlave bool, err error) {
-	query := `SHOW SLAVE STATUS;`
-	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
-		ioThreadRunning := (m.GetString("Slave_IO_Running") == "Yes")
-		sqlThreadRunning := (m.GetString("Slave_SQL_Running") == "Yes")
-		IsSlave = ioThreadRunning && sqlThreadRunning
-		return nil
-	})
-	if err != nil {
-		log.Errore(err)
-	}
-	return IsSlave, err
-}
-
-func isMaster() (IsMaster bool, err error) {
-	query := `SHOW SLAVE HOSTS;`
-	err = QueryData(query, sqlutils.Args(), func(m sqlutils.RowMap) error {
-		IsMaster = (len(m.GetString("Slave_UUID")) != 0)
-		return nil
-
-	})
-	if err != nil {
-		log.Errore(err)
-	}
-	return IsMaster, err
-}
-
 func hasActiveConnections() (HasActiveConnections bool, err error) {
 	query := `SELECT COUNT(*) AS con FROM INFORMATION_SCHEMA.PROCESSLIST WHERE User NOT IN (?,?,?);`
 	err = QueryData(query, sqlutils.Args("event_scheduler", "system user", config.Config.MySQLTopologyUser), func(m sqlutils.RowMap) error {
@@ -167,9 +128,6 @@ func GetMySQLInfo() (Info MySQLInfo, err error) {
 	Info.MySQLVersion, err = GetMySQLVersion()
 	Info.MySQLDatadirPath, err = getMySQLDatadirPath()
 	Info.MySQLBackupdirPath = config.Config.MySQLBackupDir
-	Info.IsSlave, err = isSlave()
-	Info.IsMaster, err = isMaster()
-	Info.IsBinlogEnabled, err = isBinlogEnabled()
 	Info.HasActiveConnections, err = hasActiveConnections()
 	return Info, err
 }
