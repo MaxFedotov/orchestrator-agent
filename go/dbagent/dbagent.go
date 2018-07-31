@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/openark/golib/log"
@@ -173,44 +172,9 @@ func GenerateBackupForUsers(users []string) (backup string, err error) {
 	return backup, log.Errore(err)
 }
 
-func StartSlave(sourceHost string, sourcePort int, logFile string, position string, gtidPurged string) error {
-	var err error
-	if len(logFile) > 0 && len(position) > 0 {
-		query := fmt.Sprintf(`CHANGE MASTER TO MASTER_LOG_FILE='%s', MASTER_LOG_POS=%s;`, logFile, position)
-		_, err = ExecuteQuery(query)
-		if err != nil {
-			return log.Errore(err)
-		}
-	}
-	if len(gtidPurged) > 0 {
-		// as we are restoring new slave and if we have GTIDs we may have @@GLOBAL.GTID_EXECUTED not empty and we won't be able to set @@GLOBAL.GTID_PURGED
-		// so we need to do RESET MASTER on slave
-		query := `RESET MASTER;`
-		if _, err = ExecuteQuery(query); err != nil {
-			return log.Errore(err)
-		}
-		query = fmt.Sprintf(`SET @@GLOBAL.GTID_PURGED='%s';`, gtidPurged)
-		_, err = ExecuteQuery(query)
-		if err != nil {
-			return log.Errore(err)
-		}
-		query = `CHANGE MASTER TO MASTER_AUTO_POSITION = 1;`
-		_, err = ExecuteQuery(query)
-		if err != nil {
-			return log.Errore(err)
-		}
-	}
-	query := fmt.Sprintf(`CHANGE MASTER TO MASTER_HOST='%s', MASTER_USER='%s', MASTER_PASSWORD='%s', MASTER_PORT=%d, MASTER_CONNECT_RETRY=10;`,
-		sourceHost, config.Config.MySQLReplicationUser, config.Config.MySQLReplicationPassword, sourcePort)
-	_, err = ExecuteQuery(query)
-	if err != nil {
-		return log.Errore(err)
-	}
-	query = `START SLAVE;`
-	_, err = ExecuteQuery(query)
-	if err != nil {
-		return log.Errore(err)
-	}
-	time.Sleep(5 * time.Second)
+func SetReplicationUserAndPassword() error {
+	query := fmt.Sprintf(`CHANGE MASTER TO MASTER_USER='%s', MASTER_PASSWORD='%s';`,
+		config.Config.MySQLReplicationUser, config.Config.MySQLReplicationPassword)
+	_, err := ExecuteQuery(query)
 	return err
 }
