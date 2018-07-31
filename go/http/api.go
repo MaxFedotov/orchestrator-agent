@@ -150,6 +150,24 @@ func (this *HttpAPI) GetMySQLDatabases(params martini.Params, r render.Render, r
 	r.JSON(200, output)
 }
 
+// GetBackupMetadata returns information about binlog file\position and (if exists) gtid executed set for given backup
+func (this *HttpAPI) GetBackupMetadata(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	backupFolder, err := url.QueryUnescape(params["backupFolder"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	output, err := osagent.GetBackupMetadata(params["seedId"], params["seedMethod"], backupFolder)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, output)
+}
+
 // StartLocalBackup initiates a process of local backup and returns backup folder
 func (this *HttpAPI) StartLocalBackup(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
@@ -177,11 +195,11 @@ func (this *HttpAPI) StartStreamingBackup(params martini.Params, r render.Render
 }
 
 // Cleanup remove contents of config.Config.MySQLBackupDir
-func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) CleanupMySQLBackupDir(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.Cleanup(params["seedId"])
+	err := osagent.CleanupMySQLBackupDir(params["seedId"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -351,6 +369,8 @@ func (this *HttpAPI) DiskUsage(params martini.Params, r render.Render, req *http
 
 // MySQLDiskUsage returns the number of bytes on the MySQL datadir
 func (this *HttpAPI) MySQLDiskUsage(params martini.Params, r render.Render, req *http.Request) {
+	config.Config.RLock()
+	defer config.Config.RUnlock()
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
@@ -416,8 +436,10 @@ func (this *HttpAPI) MySQLErrorLogTail(params martini.Params, r render.Render, r
 	r.JSON(200, output)
 }
 
-// MySQLPort returns the (heuristic) port on which MySQL executes
+// MySQLPort returns the port on which MySQL executes
 func (this *HttpAPI) MySQLPort(params martini.Params, r render.Render, req *http.Request) {
+	config.Config.RLock()
+	defer config.Config.RUnlock()
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
@@ -465,6 +487,8 @@ func (this *HttpAPI) MySQLStart(params martini.Params, r render.Render, req *htt
 
 // DeleteMySQLDataDir compeltely erases MySQL data directory. Use with care!
 func (this *HttpAPI) DeleteMySQLDataDir(params martini.Params, r render.Render, req *http.Request) {
+	config.Config.RLock()
+	defer config.Config.RUnlock()
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
@@ -490,6 +514,8 @@ func (this *HttpAPI) DeleteMySQLBackupDir(params martini.Params, r render.Render
 
 // GetMySQLDataDirAvailableDiskSpace returns the number of bytes free within the MySQL datadir mount
 func (this *HttpAPI) GetMySQLDataDirAvailableDiskSpace(params martini.Params, r render.Render, req *http.Request) {
+	config.Config.RLock()
+	defer config.Config.RUnlock()
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
@@ -766,6 +792,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/mysql-info", this.GetMySQLInfo)
 	m.Get("/api/mysql-databases", this.GetMySQLDatabases)
 	m.Get("/api/start-local-backup/:seedId/:seedMethod", this.StartLocalBackup)
+	m.Get("/api/backup-metadata/:seedId/:seedMethod/:backupFolder", this.GetBackupMetadata)
 	m.Get("/api/start-local-backup/:seedId/:seedMethod/:databases", this.StartLocalBackup)
 	m.Get("/api/start-streaming-backup/:seedId/:targetHost", this.StartStreamingBackup)
 	m.Get("/api/start-streaming-backup/:seedId/:targetHost/:databases", this.StartStreamingBackup)
@@ -773,7 +800,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/send-local-backup/:seedId/:targetHost/:backupFolder", this.SendLocalBackup)
 	m.Get("/api/start-restore/:seedId/:seedMethod/:sourceHost/:sourcePort/:backupFolder", this.StartRestore)
 	m.Get("/api/start-restore/:seedId/:seedMethod/:sourceHost/:sourcePort/:backupFolder/:databases", this.StartRestore)
-	m.Get("/api/cleanup/:seedId", this.Cleanup)
+	m.Get("/api/cleanup-mysql-backupdir/:seedId", this.CleanupMySQLBackupDir)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)
 	m.Get("/api/mount", this.GetMount)
