@@ -154,7 +154,7 @@ service orchestrator-agent start
 sleep 5s
 
 echo "Saving debug token"
-cat /var/log/orchestrator-agent.log | grep "DEBUG Process token" | cut -d" " -f 6 | xargs echo > /vagrant/$HOSTNAME.token.txt
+mv /tmp/token.txt /vagrant/token_`hostname`.txt
 
 if [[ -e /vagrant/db-post-install.sh ]]; then
   bash /vagrant/db-post-install.sh

@@ -1,0 +1,13 @@
+Started dump at: 2018-07-30 16:34:30
+SHOW MASTER STATUS:
+	Log: mysql-bin.000007
+	Pos: 31669395
+	GTID:e88d3eec-4f8e-11e8-aa3b-6990953c6e71:1-124593
+
+SHOW SLAVE STATUS:
+	Host: orch-agent1
+	Log: 
+	Pos: 0
+	GTID:e88d3eec-4f8e-11e8-aa3b-6990953c6e71:1-124593
+
+Finished dump at: 2018-07-30 16:34:38

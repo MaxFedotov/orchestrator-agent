@@ -27,6 +27,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/github/orchestrator-agent/go/agent"
@@ -137,6 +138,24 @@ func (this *HttpAPI) GetMySQLInfo(params martini.Params, r render.Render, req *h
 	r.JSON(200, output)
 }
 
+// CreateBackupFolder creates and returns folder for backup
+func (this *HttpAPI) CreateBackupFolder(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	var backupFolder string
+	var err error
+	if params["backupFolder"] != "" {
+		backupFolder, err = url.QueryUnescape(params["backupFolder"])
+	}
+	output, err := osagent.CreateBackupFolder(params["seedId"], backupFolder)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, output)
+}
+
 // GetMySQLDatabases returns information about database engines and their sizes
 func (this *HttpAPI) GetMySQLDatabases(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
@@ -168,25 +187,24 @@ func (this *HttpAPI) GetBackupMetadata(params martini.Params, r render.Render, r
 	r.JSON(200, output)
 }
 
-// StartLocalBackup initiates a process of local backup and returns backup folder
-func (this *HttpAPI) StartLocalBackup(params martini.Params, r render.Render, req *http.Request) {
+// StartBackup initiates a process of backup and returns backup folder (if we are not using streaming backup)
+func (this *HttpAPI) StartBackup(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := osagent.StartLocalBackup(params["seedId"], params["seedMethod"], params["databases"])
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
+	backupFolder, err := url.QueryUnescape(params["backupFolder"])
+	var databases []string
+	var targetHost string
+	if params["seedMethod"] == "xtrabackup-stream" && params["targetHost"] == "" {
+		targetHost = params["databases"]
 
-// StartStreamingBackup initiates a process of streaming backup to targetHost
-func (this *HttpAPI) StartStreamingBackup(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req); err != nil {
-		return
+	} else {
+		if params["databases"] != "" {
+			databases = strings.Split(params["databases"], ",")
+		}
+		targetHost = params["targetHost"]
 	}
-	err := osagent.StartStreamingBackup(params["seedId"], params["targetHost"], params["databases"])
+	err = osagent.StartBackup(params["seedId"], params["seedMethod"], backupFolder, databases, targetHost)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -211,7 +229,10 @@ func (this *HttpAPI) CleanupMySQLBackupDir(params martini.Params, r render.Rende
 func (this *HttpAPI) StartRestore(params martini.Params, r render.Render, req *http.Request) {
 	var err error
 	var backupFolder string
-	var sourcePort int
+	var databases []string
+	if params["databases"] != "" {
+		databases = strings.Split(params["databases"], ",")
+	}
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
@@ -220,12 +241,7 @@ func (this *HttpAPI) StartRestore(params martini.Params, r render.Render, req *h
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	sourcePort, err = strconv.Atoi(params["sourcePort"])
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	err = osagent.StartRestore(params["seedId"], params["seedMethod"], params["sourceHost"], sourcePort, backupFolder, params["databases"])
+	err = osagent.StartRestore(params["seedId"], params["seedMethod"], backupFolder, databases)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -254,8 +270,8 @@ func (this *HttpAPI) ReceiveBackup(params martini.Params, r render.Render, req *
 	r.JSON(200, err == nil)
 }
 
-// SendLocalBackup initiates a process of sending local backup to targetHost via netcat
-func (this *HttpAPI) SendLocalBackup(params martini.Params, r render.Render, req *http.Request) {
+// SendBackup initiates a process of sending local backup to targetHost via netcat
+func (this *HttpAPI) SendBackup(params martini.Params, r render.Render, req *http.Request) {
 	var err error
 	var backupFolder string
 	if err := this.validateToken(r, req); err != nil {
@@ -267,7 +283,7 @@ func (this *HttpAPI) SendLocalBackup(params martini.Params, r render.Render, req
 		return
 	}
 
-	err = osagent.SendLocalBackup(params["seedId"], params["targetHost"], backupFolder)
+	err = osagent.SendBackup(params["seedId"], params["targetHost"], backupFolder)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -425,10 +441,12 @@ func (this *HttpAPI) AvailableSnapshots(params martini.Params, r render.Render, 
 
 // returns rows in tail of mysql error log
 func (this *HttpAPI) MySQLErrorLogTail(params martini.Params, r render.Render, req *http.Request) {
+	config.Config.RLock()
+	defer config.Config.RUnlock()
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := osagent.MySQLErrorLogTail()
+	output, err := osagent.MySQLErrorLogTail(config.Config.MySQLErrorLog)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -791,15 +809,24 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/lvs-snapshots", this.ListSnapshotsLogicalVolumes)
 	m.Get("/api/mysql-info", this.GetMySQLInfo)
 	m.Get("/api/mysql-databases", this.GetMySQLDatabases)
-	m.Get("/api/start-local-backup/:seedId/:seedMethod", this.StartLocalBackup)
+
+	m.Get("/api/create-backup-folder/:seedId", this.CreateBackupFolder)
+	m.Get("/api/create-backup-folder/:seedId/:backupFolder", this.CreateBackupFolder)
+
 	m.Get("/api/backup-metadata/:seedId/:seedMethod/:backupFolder", this.GetBackupMetadata)
-	m.Get("/api/start-local-backup/:seedId/:seedMethod/:databases", this.StartLocalBackup)
-	m.Get("/api/start-streaming-backup/:seedId/:targetHost", this.StartStreamingBackup)
-	m.Get("/api/start-streaming-backup/:seedId/:targetHost/:databases", this.StartStreamingBackup)
+
+	m.Get("/api/start-backup/:seedId/:seedMethod/:backupFolder", this.StartBackup)
+	m.Get("/api/start-backup/:seedId/:seedMethod/:backupFolder/:databases", this.StartBackup)
+	m.Get("/api/start-backup/:seedId/:seedMethod/:backupFolder/:targetHost", this.StartBackup)
+	m.Get("/api/start-backup/:seedId/:seedMethod/:backupFolder/:targetHost/:databases", this.StartBackup)
+
+	m.Get("/api/send-backup/:seedId/:targetHost/:backupFolder", this.SendBackup)
+
 	m.Get("/api/receive-backup/:seedId/:seedMethod/:backupFolder", this.ReceiveBackup)
-	m.Get("/api/send-local-backup/:seedId/:targetHost/:backupFolder", this.SendLocalBackup)
-	m.Get("/api/start-restore/:seedId/:seedMethod/:sourceHost/:sourcePort/:backupFolder", this.StartRestore)
-	m.Get("/api/start-restore/:seedId/:seedMethod/:sourceHost/:sourcePort/:backupFolder/:databases", this.StartRestore)
+
+	m.Get("/api/start-restore/:seedId/:seedMethod/:backupFolder", this.StartRestore)
+	m.Get("/api/start-restore/:seedId/:seedMethod/:backupFolder/:databases", this.StartRestore)
+
 	m.Get("/api/cleanup-mysql-backupdir/:seedId", this.CleanupMySQLBackupDir)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)

@@ -8,4 +8,4 @@ vagrant-ssh-key
 vagrant-ssh-key.pub
 __pycache__
 .pytest_cache
-*.token.txt
+token_orch-agent*.txt

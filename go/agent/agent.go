@@ -21,10 +21,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/github/orchestrator-agent/go/osagent"
 	"github.com/github/orchestrator-agent/go/ssl"
 	"github.com/openark/golib/log"
 )
@@ -62,7 +62,7 @@ func buildTLS() (*tls.Config, error) {
 }
 
 func SubmitAgent() error {
-	hostname, err := osagent.Hostname()
+	hostname, err := os.Hostname()
 	if err != nil {
 		return log.Errore(err)
 	}

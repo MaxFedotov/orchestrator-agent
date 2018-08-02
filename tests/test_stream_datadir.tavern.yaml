@@ -1,4 +1,4 @@
-# test_common.tavern.yaml
+# test_stream.tavern.yaml
 
 ---
 
@@ -181,42 +181,6 @@ stages:
       body:
         $ext:
           function: testfunc:validate_response
-  - name: Create backup folder on sourceHost. Run /api/create-backup-folder on sourceHost
-    request:
-      url: http://{sourceHost}:3002/api/create-backup-folder/1
-      method: GET
-      params:
-        token: "{sourceToken}"
-    response:
-      status_code: 200
-      body:
-        $ext:
-          function: testfunc:save_backupFolder
-      save:
-        $ext:
-          function: testfunc:save_backupFolder  
-  - name: Start backup process on sourceHost. Run /api/start-backup on sourceHost
-    request:
-      url: http://{sourceHost}:3002/api/start-backup/1/{seedMethod}/{backupFolder}/{databases}
-      method: GET
-      params:
-        token: "{sourceToken}"
-    response:
-      status_code: 200
-      body:
-        $ext:
-          function: testfunc:validate_response
-  - name: Create backup folder on targetHost. Run /api/create-backup-folder on targetHost
-    request:
-      url: http://{targetHost}:3002/api/create-backup-folder/1/{backupFolder}
-      method: GET
-      params:
-        token: "{targetToken}"
-    response:
-      status_code: 200
-      body:
-        $ext:
-          function: testfunc:validate_response 
   - name: Start receiving on targetHost. Run /api/receive-backup on targetHost
     request:
       url: http://{targetHost}:3002/api/receive-backup/1/{seedMethod}/{backupFolder}
@@ -226,9 +190,9 @@ stages:
     response:
       status_code: 200
     delay_after: 3  
-  - name: Start sending backup on sourceHost. Run /api/send-backup on sourceHost
+  - name: Start streaming backup on sourceHost. Run /api/start-backup on sourceHost
     request:
-      url: http://{sourceHost}:3002/api/send-backup/1/{targetHost}/{backupFolder}
+      url: http://{sourceHost}:3002/api/start-backup/1/xtrabackup-stream/{backupFolder}/{targetHost}/{databases}
       method: GET
       params:
         token: "{sourceToken}"
@@ -245,7 +209,7 @@ stages:
       status_code: 200
       body:
         BinlogCoordinates: !anything
-        GTIDPurged: !anystr
+        GTIDPurged: !anystr  
   - name: Start restoring on targetHost. Run /api/start-restore on targetHost
     request:
       url: http://{targetHost}:3002/api/start-restore/1/{seedMethod}/{backupFolder}/{databases}

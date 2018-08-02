@@ -26,7 +26,7 @@
     "CustomCommands": {
         "true": "/bin/true"
     },
-    "TokenHintFile": "",
+    "TokenHintFile": "/tmp/token.txt",
     "MySQLTopologyUser": "orc_client_user",
     "MySQLTopologyPassword": "orc_client_password",
     "MySQLReplicationUser": "replicator",
