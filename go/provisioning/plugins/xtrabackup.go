@@ -30,9 +30,7 @@ func newXtrabackup(databases []string, extra ...string) (BackupPlugin, error) {
 	if _, err := strconv.Atoi(seedID); err != nil {
 		return nil, log.Error("Failed to initialize Xtrabackup plugin. Can't parse seedID")
 	}
-	backupPlugin := Xtrabackup{BackupFolder: backupFolder, Databases: databases, SeedID: seedID}
-	ActiveSeeds[seedID] = backupPlugin
-	return backupPlugin, nil
+	return Xtrabackup{BackupFolder: backupFolder, Databases: databases, SeedID: seedID}, nil
 }
 
 func (x Xtrabackup) Backup() error {

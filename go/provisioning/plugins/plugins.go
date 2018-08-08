@@ -14,8 +14,8 @@ type BackupMetadata struct {
 type BinlogType int
 
 const (
-	BinaryLog BinlogType = iota
-	RelayLog
+	binaryLog BinlogType = iota
+	relayLog
 )
 
 type BackupPlugin interface {
@@ -26,13 +26,11 @@ type BackupPlugin interface {
 
 type initializer func([]string, ...string) (BackupPlugin, error)
 
-var ActiveSeeds = make(map[string]BackupPlugin)
-
 var SeedMethods = map[string]initializer{
-	//	"mydumper":          newMydumper,
-	//	"mysqldump":         newMysqldump,
-	"xtrabackup": newXtrabackup,
-	//	"xtrabackup-stream": newXtrabackupStream,
+	"mydumper":          newMydumper,
+	"mysqldump":         newMysqldump,
+	"xtrabackup":        newXtrabackup,
+	"xtrabackup-stream": newXtrabackupStream,
 }
 
 func IntializePlugin(seedMethod string, databases []string, extra ...string) (BackupPlugin, error) {

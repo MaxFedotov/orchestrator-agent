@@ -15,17 +15,17 @@ import (
 	"github.com/openark/golib/log"
 )
 
-type mydumper struct {
-	databases    []string
-	backupFolder string
-	seedID       string
+type Mydumper struct {
+	Databases    []string
+	BackupFolder string
+	SeedID       string
 }
 
 const (
 	mydumperMetadataFile = "metadata"
 )
 
-func newMydumper(databases []string, extra ...string) (backupPlugin, error) {
+func newMydumper(databases []string, extra ...string) (BackupPlugin, error) {
 	if len(extra) < 2 {
 		return nil, log.Error("Failed to initialize MyDumper plugin. Not enought arguments")
 	}
@@ -37,16 +37,14 @@ func newMydumper(databases []string, extra ...string) (backupPlugin, error) {
 	if _, err := strconv.Atoi(seedID); err != nil {
 		return nil, log.Error("Failed to initialize MyDumper plugin. Can't parse seedID")
 	}
-	backupPlugin := mydumper{backupFolder: backupFolder, databases: databases, seedID: seedID}
-	ActiveSeeds[seedID] = backupPlugin
-	return backupPlugin, nil
+	return Mydumper{BackupFolder: backupFolder, Databases: databases, SeedID: seedID}, nil
 }
 
-func (md mydumper) Backup() error {
+func (md Mydumper) Backup() error {
 	config.Config.RLock()
 	defer config.Config.RUnlock()
 	cmd := fmt.Sprintf("mydumper --user=%s --password=%s --port=%d --threads=%d --outputdir=%s --triggers --events --routines --regex='(%s)'",
-		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, md.backupFolder, strings.Join(md.databases, "\\.|")+"\\.")
+		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, md.BackupFolder, strings.Join(md.Databases, "\\.|")+"\\.")
 	if config.Config.CompressLogicalBackup {
 		cmd += fmt.Sprintf(" --compress")
 	}
@@ -56,26 +54,15 @@ func (md mydumper) Backup() error {
 	err := osagent.CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			osagent.ActiveCommands[md.seedID] = cmd
+			osagent.ActiveCommands[md.SeedID] = cmd
 			log.Debug("Start backup using MyDumper")
 		})
 	return log.Errore(err)
 }
 
-func (md mydumper) Restore() error {
+func (md Mydumper) Restore() error {
 	config.Config.RLock()
 	defer config.Config.RUnlock()
-	//if we choose to backup only specific databases, add them to my.cnf replicate-do-db and restart MySQL
-	if len(md.databases) > 0 {
-		for _, db := range md.databases {
-			if err := config.AddKeyToMySQLConfig("replicate-do-db", db); err != nil {
-				return log.Errore(err)
-			}
-		}
-		if err := osagent.MySQLRestart(); err != nil {
-			return log.Errore(err)
-		}
-	}
 	//mydumper doesn't set sql_mode correctly, so we will do the same way as mysqldump does. Remember old sql_mode, than set it to
 	//NO_AUTO_VALUE_ON_ZERO and then set it back
 	sqlMode, err := dbagent.GetMySQLSql_mode()
@@ -86,11 +73,11 @@ func (md mydumper) Restore() error {
 		return log.Errore(err)
 	}
 	cmd := fmt.Sprintf("myloader -u %s -p %s -o --port %d -t %d -d %s",
-		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, md.backupFolder)
+		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, md.BackupFolder)
 	err = osagent.CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			osagent.ActiveCommands[md.seedID] = cmd
+			osagent.ActiveCommands[md.SeedID] = cmd
 			log.Debug("Start restore using Mydumper")
 		})
 	if err != nil {
@@ -100,10 +87,10 @@ func (md mydumper) Restore() error {
 	return log.Errore(err)
 }
 
-func (md mydumper) GetMetadata() (BackupMetadata, error) {
+func (md Mydumper) GetMetadata() (BackupMetadata, error) {
 	meta := BackupMetadata{
 		BinlogCoordinates: BinlogCoordinates{}}
-	file, err := os.Open(path.Join(md.backupFolder, mydumperMetadataFile))
+	file, err := os.Open(path.Join(md.BackupFolder, mydumperMetadataFile))
 	if err != nil {
 		return meta, log.Errore(err)
 	}

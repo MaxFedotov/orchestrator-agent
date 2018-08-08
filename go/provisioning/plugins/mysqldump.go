@@ -14,19 +14,18 @@ import (
 	"github.com/openark/golib/log"
 )
 
-type mysqldump struct {
-	databases    []string
-	backupFolder string
-	seedID       string
+type Mysqldump struct {
+	Databases    []string
+	BackupFolder string
+	SeedID       string
 }
 
 const (
 	mysqlbackupFileName           = "backup.sql"
 	mysqlbackupCompressedFileName = "backup.sql.gz"
-	mysqlUserBackupFileName       = "mysql_users_backup.sql"
 )
 
-func newMysqldump(databases []string, extra ...string) (backupPlugin, error) {
+func newMysqldump(databases []string, extra ...string) (BackupPlugin, error) {
 	if len(extra) < 2 {
 		return nil, log.Error("Failed to initialize MySQLDump plugin. Not enought arguments")
 	}
@@ -38,68 +37,55 @@ func newMysqldump(databases []string, extra ...string) (backupPlugin, error) {
 	if _, err := strconv.Atoi(seedID); err != nil {
 		return nil, log.Error("Failed to initialize MySQLDump plugin. Can't parse seedID")
 	}
-	backupPlugin := mysqldump{backupFolder: backupFolder, databases: databases, seedID: seedID}
-	ActiveSeeds[seedID] = backupPlugin
-	return backupPlugin, nil
+	return Mysqldump{BackupFolder: backupFolder, Databases: databases, SeedID: seedID}, nil
 }
 
-func (m mysqldump) Backup() error {
+func (m Mysqldump) Backup() error {
 	var cmd string
 	config.Config.RLock()
 	defer config.Config.RUnlock()
 	// we need to comment out SET @@GLOBAL.GTID_PURGED to be able to restore dump. Later we will issue RESET MASTER and SET @@GLOBAL.GTID_PURGED from orchestrator side
-	if len(m.databases) == 0 {
+	if len(m.Databases) == 0 {
 		cmd = fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --default-character-set=utf8mb4 --master-data=2 --routines --events --triggers --all-databases | sed -e 's/SET @@GLOBAL.GTID_PURGED=/-- SET @@GLOBAL.GTID_PURGED=/g' ",
 			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
 	} else {
 		cmd = fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --default-character-set=utf8mb4 --master-data=2 --routines --events --triggers --databases %s | sed -e 's/SET @@GLOBAL.GTID_PURGED=/-- SET @@GLOBAL.GTID_PURGED=/g' ",
-			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Join(m.databases, " "))
+			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Join(m.Databases, " "))
 	}
 	if config.Config.CompressLogicalBackup {
-		cmd += fmt.Sprintf(" | gzip > %s", path.Join(m.backupFolder, mysqlbackupCompressedFileName))
+		cmd += fmt.Sprintf(" | gzip > %s", path.Join(m.BackupFolder, mysqlbackupCompressedFileName))
 	} else {
-		cmd += fmt.Sprintf(" > %s", path.Join(m.backupFolder, mysqlbackupFileName))
+		cmd += fmt.Sprintf(" > %s", path.Join(m.BackupFolder, mysqlbackupFileName))
 	}
 	err := osagent.CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			osagent.ActiveCommands[m.seedID] = cmd
+			osagent.ActiveCommands[m.SeedID] = cmd
 			log.Debug("Start backup using MySQLDump")
 		})
 	return log.Errore(err)
 }
 
-func (m mysqldump) Restore() error {
+func (m Mysqldump) Restore() error {
 	config.Config.RLock()
 	defer config.Config.RUnlock()
-	//if we choose to backup only specific databases, add them to my.cnf replicate-do-db and restart MySQL
-	if len(m.databases) > 0 {
-		for _, db := range m.databases {
-			if err := config.AddKeyToMySQLConfig("replicate-do-db", db); err != nil {
-				return log.Errore(err)
-			}
-		}
-		if err := osagent.MySQLRestart(); err != nil {
-			return log.Errore(err)
-		}
-	}
 	if config.Config.CompressLogicalBackup {
-		cmd := fmt.Sprintf("gunzip -c %s > %s", path.Join(m.backupFolder, mysqlbackupCompressedFileName), path.Join(m.backupFolder, mysqlbackupFileName))
+		cmd := fmt.Sprintf("gunzip -c %s > %s", path.Join(m.BackupFolder, mysqlbackupCompressedFileName), path.Join(m.BackupFolder, mysqlbackupFileName))
 		err := osagent.CommandRun(
 			cmd,
 			func(cmd *exec.Cmd) {
-				osagent.ActiveCommands[m.seedID] = cmd
+				osagent.ActiveCommands[m.SeedID] = cmd
 				log.Debug("Start extracting MySQLDump backup")
 			})
 		if err != nil {
 			return log.Errore(err)
 		}
 	}
-	cmd := fmt.Sprintf("mysql -u%s -p%s --port %d < %s", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(m.backupFolder, mysqlbackupFileName))
+	cmd := fmt.Sprintf("mysql -u%s -p%s --port %d < %s", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(m.BackupFolder, mysqlbackupFileName))
 	err := osagent.CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			osagent.ActiveCommands[m.seedID] = cmd
+			osagent.ActiveCommands[m.SeedID] = cmd
 			log.Debug("Start restore using MySQLDump")
 		})
 	if err != nil {
@@ -108,10 +94,10 @@ func (m mysqldump) Restore() error {
 	return err
 }
 
-func (m mysqldump) GetMetadata() (BackupMetadata, error) {
+func (m Mysqldump) GetMetadata() (BackupMetadata, error) {
 	meta := BackupMetadata{
 		BinlogCoordinates: BinlogCoordinates{}}
-	file, err := os.Open(path.Join(m.backupFolder, mysqlbackupFileName))
+	file, err := os.Open(path.Join(m.BackupFolder, mysqlbackupFileName))
 	if err != nil {
 		return meta, log.Errore(err)
 	}
