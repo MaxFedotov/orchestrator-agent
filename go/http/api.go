@@ -34,6 +34,7 @@ import (
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/dbagent"
 	"github.com/github/orchestrator-agent/go/osagent"
+	"github.com/github/orchestrator-agent/go/provisioning"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/render"
 )
@@ -148,7 +149,7 @@ func (this *HttpAPI) CreateBackupFolder(params martini.Params, r render.Render, 
 	if params["backupFolder"] != "" {
 		backupFolder, err = url.QueryUnescape(params["backupFolder"])
 	}
-	output, err := osagent.CreateBackupFolder(params["seedId"], backupFolder)
+	output, err := osagent.CreateBackupFolder(params["seedID"], backupFolder)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -174,12 +175,7 @@ func (this *HttpAPI) GetBackupMetadata(params martini.Params, r render.Render, r
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	backupFolder, err := url.QueryUnescape(params["backupFolder"])
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	output, err := osagent.GetBackupMetadata(params["seedId"], params["seedMethod"], backupFolder)
+	output, err := provisioning.GetBackupMetadata(params["seedID"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -188,7 +184,7 @@ func (this *HttpAPI) GetBackupMetadata(params martini.Params, r render.Render, r
 }
 
 // StartBackup initiates a process of backup and returns backup folder (if we are not using streaming backup)
-func (this *HttpAPI) StartBackup(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) StartSeed(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
@@ -204,7 +200,20 @@ func (this *HttpAPI) StartBackup(params martini.Params, r render.Render, req *ht
 		}
 		targetHost = params["targetHost"]
 	}
-	err = osagent.StartBackup(params["seedId"], params["seedMethod"], backupFolder, databases, targetHost)
+	err = provisioning.StartSeed(params["seedID"], params["seedMethod"], backupFolder, databases, targetHost)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
+// StartBackup initiates a process of backup and returns backup folder (if we are not using streaming backup)
+func (this *HttpAPI) StartBackup(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	err := provisioning.StartBackup(params["seedID"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -217,7 +226,7 @@ func (this *HttpAPI) CleanupMySQLBackupDir(params martini.Params, r render.Rende
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.CleanupMySQLBackupDir(params["seedId"])
+	err := osagent.CleanupMySQLBackupDir(params["seedID"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -228,20 +237,7 @@ func (this *HttpAPI) CleanupMySQLBackupDir(params martini.Params, r render.Rende
 // StartRestore initiates a process of restoring backup
 func (this *HttpAPI) StartRestore(params martini.Params, r render.Render, req *http.Request) {
 	var err error
-	var backupFolder string
-	var databases []string
-	if params["databases"] != "" {
-		databases = strings.Split(params["databases"], ",")
-	}
-	if err := this.validateToken(r, req); err != nil {
-		return
-	}
-	backupFolder, err = url.QueryUnescape(params["backupFolder"])
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	err = osagent.StartRestore(params["seedId"], params["seedMethod"], backupFolder, databases)
+	err = provisioning.StartRestore(params["seedID"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -262,7 +258,7 @@ func (this *HttpAPI) ReceiveBackup(params martini.Params, r render.Render, req *
 		return
 	}
 
-	err = osagent.ReceiveBackup(params["seedId"], params["seedMethod"], backupFolder)
+	err = osagent.ReceiveBackup(params["seedID"], params["seedMethod"], backupFolder)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -283,7 +279,7 @@ func (this *HttpAPI) SendBackup(params martini.Params, r render.Render, req *htt
 		return
 	}
 
-	err = osagent.SendBackup(params["seedId"], params["targetHost"], backupFolder)
+	err = osagent.SendBackup(params["seedID"], params["targetHost"], backupFolder)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -586,7 +582,7 @@ func (this *HttpAPI) ReceiveMySQLSeedData(params martini.Params, r render.Render
 	if err = this.validateToken(r, req); err != nil {
 		return
 	}
-	go osagent.ReceiveMySQLSeedData(params["seedId"])
+	go osagent.ReceiveMySQLSeedData(params["seedID"])
 	r.JSON(200, err == nil)
 }
 
@@ -600,7 +596,7 @@ func (this *HttpAPI) SendMySQLSeedData(params martini.Params, r render.Render, r
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	go osagent.SendMySQLSeedData(params["targetHost"], mount.MySQLDataPath, params["seedId"])
+	go osagent.SendMySQLSeedData(params["targetHost"], mount.MySQLDataPath, params["seedID"])
 	r.JSON(200, err == nil)
 }
 
@@ -609,7 +605,7 @@ func (this *HttpAPI) AbortSeed(params martini.Params, r render.Render, req *http
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	osagent.AbortSeed(params["seedId"])
+	osagent.AbortSeed(params["seedID"])
 	r.JSON(200, true)
 }
 
@@ -618,7 +614,7 @@ func (this *HttpAPI) SeedCommandCompleted(params martini.Params, r render.Render
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output := osagent.SeedCommandCompleted(params["seedId"])
+	output := osagent.SeedCommandCompleted(params["seedID"])
 	r.JSON(200, output)
 }
 
@@ -627,7 +623,7 @@ func (this *HttpAPI) SeedCommandSucceeded(params martini.Params, r render.Render
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output := osagent.SeedCommandSucceeded(params["seedId"])
+	output := osagent.SeedCommandSucceeded(params["seedID"])
 	r.JSON(200, output)
 }
 
@@ -810,24 +806,23 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/mysql-info", this.GetMySQLInfo)
 	m.Get("/api/mysql-databases", this.GetMySQLDatabases)
 
-	m.Get("/api/create-backup-folder/:seedId", this.CreateBackupFolder)
-	m.Get("/api/create-backup-folder/:seedId/:backupFolder", this.CreateBackupFolder)
+	m.Get("/api/create-backup-folder/:seedID", this.CreateBackupFolder)
+	m.Get("/api/create-backup-folder/:seedID/:backupFolder", this.CreateBackupFolder)
 
-	m.Get("/api/backup-metadata/:seedId/:seedMethod/:backupFolder", this.GetBackupMetadata)
+	m.Get("/api/backup-metadata/:seedID", this.GetBackupMetadata)
+	m.Get("/api/start-backup/:seedID", this.StartBackup)
+	m.Get("/api/start-restore/:seedID", this.StartRestore)
 
-	m.Get("/api/start-backup/:seedId/:seedMethod/:backupFolder", this.StartBackup)
-	m.Get("/api/start-backup/:seedId/:seedMethod/:backupFolder/:databases", this.StartBackup)
-	m.Get("/api/start-backup/:seedId/:seedMethod/:backupFolder/:targetHost", this.StartBackup)
-	m.Get("/api/start-backup/:seedId/:seedMethod/:backupFolder/:targetHost/:databases", this.StartBackup)
+	m.Get("/api/start-seed/:seedID/:seedMethod/:backupFolder", this.StartSeed)
+	m.Get("/api/start-seed/:seedID/:seedMethod/:backupFolder/:databases", this.StartSeed)
+	m.Get("/api/start-seed/:seedID/:seedMethod/:backupFolder/:targetHost", this.StartSeed)
+	m.Get("/api/start-seed/:seedID/:seedMethod/:backupFolder/:targetHost/:databases", this.StartSeed)
 
-	m.Get("/api/send-backup/:seedId/:targetHost/:backupFolder", this.SendBackup)
+	m.Get("/api/send-backup/:seedID/:targetHost/:backupFolder", this.SendBackup)
 
-	m.Get("/api/receive-backup/:seedId/:seedMethod/:backupFolder", this.ReceiveBackup)
+	m.Get("/api/receive-backup/:seedID/:seedMethod/:backupFolder", this.ReceiveBackup)
 
-	m.Get("/api/start-restore/:seedId/:seedMethod/:backupFolder", this.StartRestore)
-	m.Get("/api/start-restore/:seedId/:seedMethod/:backupFolder/:databases", this.StartRestore)
-
-	m.Get("/api/cleanup-mysql-backupdir/:seedId", this.CleanupMySQLBackupDir)
+	m.Get("/api/cleanup-mysql-backupdir/:seedID", this.CleanupMySQLBackupDir)
 	m.Get("/api/lv", this.LogicalVolume)
 	m.Get("/api/lv/:lv", this.LogicalVolume)
 	m.Get("/api/mount", this.GetMount)
@@ -850,11 +845,11 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/mysql-backupdir-available-space", this.GetMySQLBackupDirAvailableDiskSpace)
 	m.Get("/api/available-seed-methods", this.GetAvailableSeedMethods)
 	m.Get("/api/post-copy", this.PostCopy)
-	m.Get("/api/receive-mysql-seed-data/:seedId", this.ReceiveMySQLSeedData)
-	m.Get("/api/send-mysql-seed-data/:targetHost/:seedId", this.SendMySQLSeedData)
-	m.Get("/api/abort-seed/:seedId", this.AbortSeed)
-	m.Get("/api/seed-command-completed/:seedId", this.SeedCommandCompleted)
-	m.Get("/api/seed-command-succeeded/:seedId", this.SeedCommandSucceeded)
+	m.Get("/api/receive-mysql-seed-data/:seedID", this.ReceiveMySQLSeedData)
+	m.Get("/api/send-mysql-seed-data/:targetHost/:seedID", this.SendMySQLSeedData)
+	m.Get("/api/abort-seed/:seedID", this.AbortSeed)
+	m.Get("/api/seed-command-completed/:seedID", this.SeedCommandCompleted)
+	m.Get("/api/seed-command-succeeded/:seedID", this.SeedCommandSucceeded)
 	m.Get("/api/mysql-relay-log-index-file", this.RelayLogIndexFile)
 	m.Get("/api/mysql-relay-log-files", this.RelayLogFiles)
 	m.Get("/api/mysql-relay-log-end-coordinates", this.RelayLogEndCoordinates)

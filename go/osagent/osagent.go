@@ -40,7 +40,7 @@ import (
 	"github.com/openark/golib/log"
 )
 
-var activeCommands = make(map[string]*exec.Cmd)
+var ActiveCommands = make(map[string]*exec.Cmd)
 var seedMethods = []string{"xtrabackup", "xtrabackup-stream", "lvm", "mydumper", "mysqldump"}
 var mysqlUsersTables = []string{"user", "columns_priv", "procs_priv", "proxies_priv", "tables_priv"}
 var systemDatabases = []string{"mysql", "information_schema"}
@@ -51,7 +51,7 @@ const (
 	mysqlUserBackupFileName       = "mysql_users_backup.sql"
 	mydumperMetadataFile          = "metadata"
 	xtrabackupMetadataFile        = "xtrabackup_binlog_info"
-	mysqlRestartSleepInterval     = 40
+	mySQLRestartSleepInterval     = 40
 	mysqlBackupDatadirName        = "mysql_datadir_backup.tar.gz"
 )
 
@@ -322,8 +322,8 @@ func commandOutput(commandText string) ([]byte, error) {
 	return outputBytes, nil
 }
 
-// commandRun executes a command
-func commandRun(commandText string, onCommand func(*exec.Cmd)) error {
+// CommandRun executes a command
+func CommandRun(commandText string, onCommand func(*exec.Cmd)) error {
 	var stderr bytes.Buffer
 	cmd, tmpFileName, err := execCmd(commandText)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -558,8 +558,8 @@ func DeleteDirContents(path string) error {
 	return nil
 }
 
-// deleteFile deletes file located in folder. Can be used with wildcards
-func deleteFile(path string, file string) error {
+// DeleteFile deletes file located in folder. Can be used with wildcards
+func DeleteFile(path string, file string) error {
 	files, err := filepath.Glob(filepath.Join(path, file))
 	if err != nil {
 		return log.Errore(err)
@@ -674,13 +674,13 @@ func MySQLStop() error {
 }
 
 func MySQLStart() error {
-	cmd := fmt.Sprintf("%s; sleep %d", config.Config.MySQLServiceStartCommand, mysqlRestartSleepInterval)
+	cmd := fmt.Sprintf("%s; sleep %d", config.Config.MySQLServiceStartCommand, mySQLRestartSleepInterval)
 	_, err := commandOutput(cmd)
 	return err
 }
 
-func mySQLRestart() error {
-	cmd := fmt.Sprintf("%s; sleep %d", config.Config.MySQLServiceRestartCommand, mysqlRestartSleepInterval)
+func MySQLRestart() error {
+	cmd := fmt.Sprintf("%s; sleep %d", config.Config.MySQLServiceRestartCommand, mySQLRestartSleepInterval)
 	_, err := commandOutput(cmd)
 	return err
 }
@@ -694,10 +694,10 @@ func ReceiveMySQLSeedData(seedId string) error {
 		return log.Error("Empty directory in ReceiveMySQLSeedData")
 	}
 
-	err := commandRun(
+	err := CommandRun(
 		fmt.Sprintf("%s %s %d", config.Config.ReceiveSeedDataCommand, directory, config.Config.SeedPort),
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("ReceiveMySQLSeedData command completed")
 		})
 	if err != nil {
@@ -711,9 +711,9 @@ func SendMySQLSeedData(targetHostname string, directory string, seedId string) e
 	if directory == "" {
 		return log.Error("Empty directory in SendMySQLSeedData")
 	}
-	err := commandRun(fmt.Sprintf("%s %s %s %d", config.Config.SendSeedDataCommand, directory, targetHostname, config.Config.SeedPort),
+	err := CommandRun(fmt.Sprintf("%s %s %s %d", config.Config.SendSeedDataCommand, directory, targetHostname, config.Config.SeedPort),
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("SendMySQLSeedData command completed")
 		})
 	if err != nil {
@@ -723,7 +723,7 @@ func SendMySQLSeedData(targetHostname string, directory string, seedId string) e
 }
 
 func SeedCommandCompleted(seedId string) bool {
-	if cmd, ok := activeCommands[seedId]; ok {
+	if cmd, ok := ActiveCommands[seedId]; ok {
 		if cmd.ProcessState != nil {
 			return cmd.ProcessState.Exited()
 		}
@@ -732,7 +732,7 @@ func SeedCommandCompleted(seedId string) bool {
 }
 
 func SeedCommandSucceeded(seedId string) bool {
-	if cmd, ok := activeCommands[seedId]; ok {
+	if cmd, ok := ActiveCommands[seedId]; ok {
 		if cmd.ProcessState != nil {
 			return cmd.ProcessState.Success()
 		}
@@ -741,7 +741,7 @@ func SeedCommandSucceeded(seedId string) bool {
 }
 
 func AbortSeed(seedId string) error {
-	if cmd, ok := activeCommands[seedId]; ok {
+	if cmd, ok := ActiveCommands[seedId]; ok {
 		log.Debugf("Killing process %d", cmd.Process.Pid)
 		return cmd.Process.Kill()
 	} else {
@@ -754,7 +754,7 @@ func ExecCustomCmdWithOutput(commandKey string) ([]byte, error) {
 	return commandOutput(config.Config.CustomCommands[commandKey])
 }
 
-func contains(item string, list []string) bool {
+func Contains(item string, list []string) bool {
 	for _, b := range list {
 		if item == b {
 			return true
@@ -817,7 +817,7 @@ func GetAvailableSeedMethods() []string {
 		default:
 			cmd = seedMethod
 		}
-		err := commandRun(
+		err := CommandRun(
 			fmt.Sprintf("%s --version", cmd),
 			func(cmd *exec.Cmd) {
 				log.Debug("Checking for seed method", seedMethod)
@@ -840,103 +840,6 @@ func CreateBackupFolder(seedId string, backupFolderPath string) (backupFolder st
 	return backupFolder, log.Errore(err)
 }
 
-func StartBackup(seedId string, seedMethod string, backupFolder string, databases []string, targetHost string) (err error) {
-	var cmd string
-	if !contains(seedMethod, seedMethods) {
-		log.Errorf("Unsupported seed method")
-	}
-	if seedMethod == "xtrabackup-stream" && targetHost == "" {
-		log.Errorf("Target host should be specified when using xtrabackup-stream")
-	}
-	// if we optionally pass some databases, let's check that they exists
-	if len(databases) != 0 {
-		availiableDatabases, _ := dbagent.GetMySQLDatabases()
-		for _, db := range databases {
-			if !contains(db, availiableDatabases) {
-				log.Errorf("Cannot backup database %+v. Database doesn't exists", db)
-			}
-		}
-		//if we don't already have mysql database in databases, add it
-		if !contains("mysql", databases) {
-			databases = append(databases, "mysql")
-		}
-		//and if we are on 5.7 we need to add sys db because sometimes during mysql_upgrade run we can get errors like mysql_upgrade: [ERROR] 1813: Tablespace '`sys`.`sys_config`' exists
-		version, _ := dbagent.GetMySQLVersion()
-		if version == "5.7" && !contains("sys", databases) {
-			databases = append(databases, "sys")
-		}
-	}
-	// create command for running backup using defined seed method
-	switch seedMethod {
-	case "xtrabackup":
-		cmd = backupXtrabackupCmd(backupFolder, databases)
-	case "mydumper":
-		cmd = backupMydumperCmd(backupFolder, databases)
-	case "mysqldump":
-		cmd = backupMysqldumpCmd(backupFolder, databases)
-	case "xtrabackup-stream":
-		cmd = backupXtrabackupStreamCmd(targetHost, databases)
-	}
-	err = commandRun(
-		cmd,
-		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
-			log.Debugf("Start backup using %+v seed method", seedMethod)
-		})
-	return log.Errore(err)
-}
-
-func backupXtrabackupStreamCmd(targetHost string, databases []string) (cmd string) {
-	config.Config.RLock()
-	defer config.Config.RUnlock()
-	cmd = fmt.Sprintf("innobackupex %s --stream=xbstream --user=%s --password=%s --port=%d --parallel=%d --databases='%s' | nc -w 20 %s %d",
-		config.Config.MySQLBackupDir, config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.XtrabackupParallelThreads, strings.Join(databases, " "), targetHost, config.Config.SeedPort)
-	if runtime.GOOS == "darwin" {
-		cmd += " -c"
-	}
-	return cmd
-}
-
-func backupMysqldumpCmd(backupFolder string, databases []string) (cmd string) {
-	config.Config.RLock()
-	defer config.Config.RUnlock()
-	// we need to comment out SET @@GLOBAL.GTID_PURGED to be able to restore dump. Later we will issue RESET MASTER and SET @@GLOBAL.GTID_PURGED from orchestrator side
-	if len(databases) == 0 {
-		cmd = fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --default-character-set=utf8mb4 --master-data=2 --routines --events --triggers --all-databases | sed -e 's/SET @@GLOBAL.GTID_PURGED=/-- SET @@GLOBAL.GTID_PURGED=/g' ",
-			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
-	} else {
-		cmd = fmt.Sprintf("mysqldump --user=%s --password=%s --port=%d --single-transaction --default-character-set=utf8mb4 --master-data=2 --routines --events --triggers --databases %s | sed -e 's/SET @@GLOBAL.GTID_PURGED=/-- SET @@GLOBAL.GTID_PURGED=/g' ",
-			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Join(databases, " "))
-	}
-	if config.Config.CompressLogicalBackup {
-		cmd += fmt.Sprintf(" | gzip > %s", path.Join(backupFolder, mysqlbackupCompressedFileName))
-	} else {
-		cmd += fmt.Sprintf(" > %s", path.Join(backupFolder, mysqlbackupFileName))
-	}
-	return cmd
-}
-
-func backupMydumperCmd(backupFolder string, databases []string) (cmd string) {
-	config.Config.RLock()
-	defer config.Config.RUnlock()
-	cmd = fmt.Sprintf("mydumper --user=%s --password=%s --port=%d --threads=%d --outputdir=%s --triggers --events --routines --regex='(%s)'",
-		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, backupFolder, strings.Join(databases, "\\.|")+"\\.")
-	if config.Config.CompressLogicalBackup {
-		cmd += fmt.Sprintf(" --compress")
-	}
-	if config.Config.MyDumperRowsChunkSize != 0 {
-		cmd += fmt.Sprintf(" --rows=%d", config.Config.MyDumperRowsChunkSize)
-	}
-	return cmd
-}
-
-func backupXtrabackupCmd(backupFolder string, databases []string) string {
-	config.Config.RLock()
-	defer config.Config.RUnlock()
-	return fmt.Sprintf("xtrabackup --backup --user=%s --password=%s --port=%d --parallel=%d --target-dir=%s --databases='%s'",
-		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.XtrabackupParallelThreads, backupFolder, strings.Join(databases, " "))
-}
-
 func backupMySQLUsers(seedId string) (err error) {
 	config.Config.RLock()
 	defer config.Config.RUnlock()
@@ -957,18 +860,18 @@ func backupMySQLUsers(seedId string) (err error) {
 	} else {
 		cmd := fmt.Sprintf("mysqldump --master-data=2 --set-gtid-purged=OFF --user=%s --password=%s --port=%d --single-transaction mysql %s > %s",
 			config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, strings.Join(mysqlUsersTables, " "), path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
-		err = commandRun(
+		err = CommandRun(
 			cmd,
 			func(cmd *exec.Cmd) {
-				activeCommands[seedId] = cmd
+				ActiveCommands[seedId] = cmd
 				log.Debug("Backing up MySQL users")
 			})
 	}
 	cmd := fmt.Sprintf("echo 'FLUSH PRIVILEGES;' >> %s", path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
-	err = commandRun(
+	err = CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("Adding FLUSH PRIVILEGES command to MySQL users backup")
 		})
 	return log.Errore(err)
@@ -978,10 +881,10 @@ func restoreMySQLUsers(seedId string, backupFolder string) error {
 	config.Config.RLock()
 	defer config.Config.RUnlock()
 	cmd := fmt.Sprintf("mysql -u%s -p%s --port %d mysql < %s", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(config.Config.MySQLBackupDir, mysqlUserBackupFileName))
-	err := commandRun(
+	err := CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("Restoring MySQL users")
 		})
 	return log.Errore(err)
@@ -993,7 +896,7 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 	var cmd string
 	var err error
 	var MySQLInnoDBLogDir string
-	if !contains(seedMethod, seedMethods) {
+	if !Contains(seedMethod, seedMethods) {
 		return log.Errorf("Unsupported seed method")
 	}
 	if config.Config.MySQLBackupOldDatadir {
@@ -1001,10 +904,10 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 			return log.Errore(err)
 		}
 		cmd := fmt.Sprintf("tar zcfp %s -C %s .", path.Join(config.Config.MySQLBackupDir, mysqlBackupDatadirName), config.Config.MySQLDataDir)
-		err := commandRun(
+		err := CommandRun(
 			cmd,
 			func(cmd *exec.Cmd) {
-				activeCommands[seedId] = cmd
+				ActiveCommands[seedId] = cmd
 				log.Debugf("Backing up old datadir")
 			})
 		if err != nil {
@@ -1014,19 +917,20 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 			return log.Errore(err)
 		}
 	}
+	// backup MySQL users
+	if err := backupMySQLUsers(seedId); err != nil {
+		return log.Errore(err)
+	}
 	if backupFolder == config.Config.MySQLDataDir && seedMethod == "xtrabackup-stream" {
 		if len(config.Config.MySQLInnoDBLogDir) == 0 {
 			MySQLInnoDBLogDir = config.Config.MySQLDataDir
 		} else {
 			MySQLInnoDBLogDir = config.Config.MySQLInnoDBLogDir
 		}
-		if err := backupMySQLUsers(seedId); err != nil {
-			return log.Errore(err)
-		}
 		if err := MySQLStop(); err != nil {
 			return log.Errore(err)
 		}
-		if err := deleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
+		if err := DeleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
 			return log.Errore(err)
 		}
 		if err := DeleteDirContents(config.Config.MySQLDataDir); err != nil {
@@ -1043,7 +947,7 @@ func ReceiveBackup(seedId string, seedMethod string, backupFolder string) error 
 	err = commandStart(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("Receiving MySQL backup")
 		})
 	return log.Errore(err)
@@ -1054,10 +958,10 @@ func SendBackup(seedId string, targetHost string, backupFolder string) error {
 	if runtime.GOOS == "darwin" {
 		cmd += " -c"
 	}
-	err := commandRun(
+	err := CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debugf("Sending MySQL backup to %+v", targetHost)
 		})
 	return log.Errore(err)
@@ -1066,7 +970,7 @@ func SendBackup(seedId string, targetHost string, backupFolder string) error {
 func CleanupMySQLBackupDir(seedId string) error {
 	err := DeleteDirContents(config.Config.MySQLBackupDir)
 	// if we have some active commands, let's kill them to prevent future errors
-	cmd := activeCommands[seedId]
+	cmd := ActiveCommands[seedId]
 	if cmd != nil {
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
@@ -1087,10 +991,10 @@ func StartRestore(seedId string, seedMethod string, backupFolder string, databas
 			return log.Errore(err)
 		}
 		cmd := fmt.Sprintf("tar zxfp %s -C %s", path.Join(config.Config.MySQLBackupDir, mysqlBackupDatadirName), config.Config.MySQLDataDir)
-		err := commandRun(
+		err := CommandRun(
 			cmd,
 			func(cmd *exec.Cmd) {
-				activeCommands[seedId] = cmd
+				ActiveCommands[seedId] = cmd
 				log.Debugf("Restoring old datadir")
 			})
 		if err != nil {
@@ -1106,7 +1010,7 @@ func StartRestore(seedId string, seedMethod string, backupFolder string, databas
 func startRestore(seedId string, seedMethod string, backupFolder string, databases []string) (err error) {
 	config.Config.RLock()
 	defer config.Config.RUnlock()
-	if !contains(seedMethod, seedMethods) {
+	if !Contains(seedMethod, seedMethods) {
 		return log.Errorf("Unsupported seed method")
 	}
 	if len(databases) > 0 {
@@ -1117,7 +1021,7 @@ func startRestore(seedId string, seedMethod string, backupFolder string, databas
 		}
 		// we do not need to restart MySQL in case of xtrabackup-stream to datadir as it's already stopped
 		if seedMethod != "xtrabackup-stream" && backupFolder != config.Config.MySQLDataDir {
-			if err := mySQLRestart(); err != nil {
+			if err := MySQLRestart(); err != nil {
 				return log.Errore(err)
 			}
 		}
@@ -1168,7 +1072,7 @@ func restoreXtrabackup(seedId string, backupFolder string, databases []string) (
 		if err := MySQLStop(); err != nil {
 			return log.Errore(err)
 		}
-		if err := deleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
+		if err := DeleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
 			return log.Errore(err)
 		}
 		if err := DeleteDirContents(config.Config.MySQLDataDir); err != nil {
@@ -1177,11 +1081,11 @@ func restoreXtrabackup(seedId string, backupFolder string, databases []string) (
 		if err := copyXtrabackup(seedId, backupFolder); err != nil {
 			return log.Errore(err)
 		}
-		if err := deleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
+		if err := DeleteFile(MySQLInnoDBLogDir, "ib_logfile*"); err != nil {
 			return log.Errore(err)
 		}
 	}
-	if err := changeDatadirPermissions(seedId); err != nil {
+	if err := ChangeDatadirPermissions(seedId); err != nil {
 		return log.Errore(err)
 	}
 	if err := MySQLStart(); err != nil {
@@ -1191,10 +1095,23 @@ func restoreXtrabackup(seedId string, backupFolder string, databases []string) (
 		if err := runMySQLUpgrade(seedId); err != nil {
 			return log.Errore(err)
 		}
-		if err := mySQLRestart(); err != nil {
+		if err := MySQLRestart(); err != nil {
 			return log.Errore(err)
 		}
 	}
+	return err
+}
+
+func runMySQLUpgrade(seedID string) error {
+	config.Config.RLock()
+	defer config.Config.RUnlock()
+	cmd := fmt.Sprintf("mysql_upgrade --protocol=tcp -u%s -p%s --port %d --force", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
+	err := CommandRun(
+		cmd,
+		func(cmd *exec.Cmd) {
+			ActiveCommands[seedID] = cmd
+			log.Debug("Start mysql_upgrade")
+		})
 	return err
 }
 
@@ -1222,10 +1139,10 @@ func restoreMydumperCmd(seedId string, backupFolder string) error {
 	defer config.Config.RUnlock()
 	cmd := fmt.Sprintf("myloader -u %s -p %s -o --port %d -t %d -d %s",
 		config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, config.Config.MyDumperParallelThreads, backupFolder)
-	err := commandRun(
+	err := CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("Restoring using mydumper")
 		})
 	if err != nil {
@@ -1239,10 +1156,10 @@ func restoreMySQLDump(seedId string, backupFolder string) error {
 	defer config.Config.RUnlock()
 	if config.Config.CompressLogicalBackup {
 		cmd := fmt.Sprintf("gunzip -c %s > %s", path.Join(backupFolder, mysqlbackupCompressedFileName), path.Join(backupFolder, mysqlbackupFileName))
-		err := commandRun(
+		err := CommandRun(
 			cmd,
 			func(cmd *exec.Cmd) {
-				activeCommands[seedId] = cmd
+				ActiveCommands[seedId] = cmd
 				log.Debug("Extracting mysqldump backup")
 			})
 		if err != nil {
@@ -1250,10 +1167,10 @@ func restoreMySQLDump(seedId string, backupFolder string) error {
 		}
 	}
 	cmd := fmt.Sprintf("mysql -u%s -p%s --port %d < %s", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort, path.Join(backupFolder, mysqlbackupFileName))
-	err := commandRun(
+	err := CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("Restoring using mysqlbackup")
 		})
 	if err != nil {
@@ -1264,10 +1181,10 @@ func restoreMySQLDump(seedId string, backupFolder string) error {
 
 func copyXtrabackup(seedId string, backupFolder string) error {
 	cmd := fmt.Sprintf("xtrabackup --copy-back --target-dir=%s", backupFolder)
-	err := commandRun(
+	err := CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("Copying xtrabackup to datadir")
 		})
 	return err
@@ -1275,132 +1192,24 @@ func copyXtrabackup(seedId string, backupFolder string) error {
 
 func prepareXtrabackup(seedId string, backupFolder string) error {
 	cmd := fmt.Sprintf("xtrabackup --prepare --target-dir=%s", backupFolder)
-	err := commandRun(
+	err := CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("Preparing xtrabackup")
 		})
 	return err
 }
 
-func changeDatadirPermissions(seedId string) error {
+func ChangeDatadirPermissions(seedId string) error {
 	config.Config.RLock()
 	defer config.Config.RUnlock()
 	cmd := fmt.Sprintf("chown -R mysql:mysql %s", config.Config.MySQLDataDir)
-	err := commandRun(
+	err := CommandRun(
 		cmd,
 		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
+			ActiveCommands[seedId] = cmd
 			log.Debug("Changing permissions on MySQL datadir")
 		})
 	return err
-}
-
-func runMySQLUpgrade(seedId string) error {
-	config.Config.RLock()
-	defer config.Config.RUnlock()
-	cmd := fmt.Sprintf("mysql_upgrade --protocol=tcp -u%s -p%s --port %d --force", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
-	err := commandRun(
-		cmd,
-		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
-			log.Debug("Running mysql_upgrade")
-		})
-	return err
-}
-
-func GetBackupMetadata(seedId string, seedMethod string, backupFolder string) (BackupMetadata, error) {
-	var logFile, gtidPurged = "", ""
-	var err error
-	var position int64
-	switch seedMethod {
-	case "xtrabackup", "xtrabackup-stream":
-		logFile, position, gtidPurged, err = parseXtrabackupMetadata(backupFolder)
-	case "mydumper":
-		logFile, position, gtidPurged, err = parseMydumperMetadata(backupFolder)
-	case "mysqldump":
-		logFile, position, gtidPurged, err = parseMysqldumpMetadata(backupFolder)
-	}
-	meta := BackupMetadata{
-		BinlogCoordinates: BinlogCoordinates{
-			LogFile: logFile,
-			LogPos:  position,
-		},
-		GTIDPurged: gtidPurged,
-	}
-	return meta, log.Errore(err)
-}
-
-func parseXtrabackupMetadata(backupFolder string) (logFile string, position int64, gtidPurged string, err error) {
-	var params []string
-	file, err := os.Open(path.Join(backupFolder, xtrabackupMetadataFile))
-	if err != nil {
-		return "", 0, "", log.Errore(err)
-	}
-	defer file.Close()
-	reader := bufio.NewReader(file)
-	metadata, err := reader.ReadString('\n')
-	if err != nil {
-		return "", 0, "", log.Errore(err)
-	}
-	params = strings.Split(metadata, "\t")
-	logFile = params[0]
-	position, err = strconv.ParseInt(strings.Trim(params[1], "\n"), 10, 64)
-	if err != nil {
-		return "", 0, "", log.Errore(err)
-	}
-	if len(params) > 2 {
-		gtidPurged = strings.Trim(params[2], "\n")
-	}
-	return logFile, position, gtidPurged, err
-}
-
-func parseMysqldumpMetadata(backupFolder string) (logFile string, position int64, gtidPurged string, err error) {
-	file, err := os.Open(path.Join(backupFolder, mysqlbackupFileName))
-	if err != nil {
-		return "", 0, "", log.Errore(err)
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "GTID_PURGED") {
-			gtidPurged = strings.Replace(strings.Replace(strings.Split(scanner.Text(), "=")[1], "'", "", -1), ";", "", -1)
-		}
-		if strings.Contains(scanner.Text(), "CHANGE MASTER") {
-			logFile = strings.Replace(strings.Split(strings.Split(scanner.Text(), ",")[0], "=")[1], "'", "", -1)
-			position, err = strconv.ParseInt(strings.Replace(strings.Split(strings.Split(scanner.Text(), ",")[1], "=")[1], ";", "", -1), 10, 64)
-			if err != nil {
-				return "", 0, "", log.Errore(err)
-			}
-			break
-		}
-	}
-	return logFile, position, gtidPurged, err
-}
-
-func parseMydumperMetadata(backupFolder string) (logFile string, position int64, gtidPurged string, err error) {
-	file, err := os.Open(path.Join(backupFolder, mydumperMetadataFile))
-	if err != nil {
-		return "", 0, "", log.Errore(err)
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "Log:") {
-			logFile = strings.Trim(strings.Split(scanner.Text(), ":")[1], " ")
-		}
-		if strings.Contains(scanner.Text(), "Pos:") {
-			position, err = strconv.ParseInt(strings.Trim(strings.Split(scanner.Text(), ":")[1], " "), 10, 64)
-			if err != nil {
-				return "", 0, "", log.Errore(err)
-			}
-		}
-
-		if strings.Contains(scanner.Text(), "GTID:") {
-			gtidPurged = strings.Trim(strings.SplitAfterN(scanner.Text(), ":", 2)[1], " ")
-			break
-		}
-	}
-	return logFile, position, gtidPurged, err
 }
