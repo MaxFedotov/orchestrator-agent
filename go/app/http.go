@@ -32,7 +32,7 @@ import (
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/http"
 	"github.com/github/orchestrator-agent/go/ssl"
-	"github.com/outbrain/golib/log"
+	"github.com/openark/golib/log"
 )
 
 // Http starts serving HTTP (api/web) requests

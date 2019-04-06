@@ -71,8 +71,8 @@ type APIResponse struct {
 // validateToken validates the request contains a valid token
 func (this *HttpAPI) validateToken(r render.Render, req *http.Request) error {
 	var token string
-	if config.Config.TokenHttpHeader != "" {
-		token = req.Header.Get(config.Config.TokenHttpHeader)
+	if config.Config.TokenHTTPHeader != "" {
+		token = req.Header.Get(config.Config.TokenHTTPHeader)
 	}
 	if token == "" {
 		token = req.URL.Query().Get("token")
@@ -228,7 +228,7 @@ func (this *HttpAPI) MySQLDiskUsage(params martini.Params, r render.Render, req 
 	r.JSON(200, output)
 }
 
-// CreateSnapshot lists dc-local available snapshots for this host
+// CreateSnapshot creates snapshot for this host
 func (this *HttpAPI) CreateSnapshot(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
 		return
@@ -264,6 +264,15 @@ func (this *HttpAPI) AvailableSnapshots(params martini.Params, r render.Render, 
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
+	r.JSON(200, output)
+}
+
+// Snapshots lists available snapshots for this host
+func (this *HttpAPI) getAgent(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	output := agent.OrchAgent.GetAgentInfo()
 	r.JSON(200, output)
 }
 
@@ -594,43 +603,58 @@ func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *htt
 
 // RegisterRequests makes for the de-facto list of known API calls
 func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
-	m.Get("/api/hostname", this.Hostname)
-	m.Get("/api/lvs", this.ListLogicalVolumes)
-	m.Get("/api/lvs/:pattern", this.ListLogicalVolumes)
-	m.Get("/api/lvs-snapshots", this.ListSnapshotsLogicalVolumes)
-	m.Get("/api/lv", this.LogicalVolume)
-	m.Get("/api/lv/:lv", this.LogicalVolume)
-	m.Get("/api/mount", this.GetMount)
-	m.Get("/api/mountlv", this.MountLV)
-	m.Get("/api/removelv", this.RemoveLV)
-	m.Get("/api/umount", this.Unmount)
-	m.Get("/api/du", this.DiskUsage)
-	m.Get("/api/mysql-du", this.MySQLDiskUsage)
-	m.Get("/api/create-snapshot", this.CreateSnapshot)
-	m.Get("/api/available-snapshots-local", this.AvailableLocalSnapshots)
-	m.Get("/api/available-snapshots", this.AvailableSnapshots)
-	m.Get("/api/mysql-error-log-tail", this.MySQLErrorLogTail)
-	m.Get("/api/mysql-port", this.MySQLPort)
-	m.Get("/api/mysql-status", this.MySQLRunning)
+
+	// commands LVM
+	m.Get("/api/mountlv", this.MountLV)                // MountLV mounts a logical volume on config mount point (Backup)
+	m.Get("/api/removelv", this.RemoveLV)              // RemoveLV removes a logical volume
+	m.Get("/api/umount", this.Unmount)                 // Unmount umounts the config mount point (Cleanup)
+	m.Get("/api/create-snapshot", this.CreateSnapshot) // CreateSnapshot creates snapshot for this host
+
+	// commands MySQL
 	m.Get("/api/mysql-stop", this.MySQLStop)
 	m.Get("/api/mysql-start", this.MySQLStart)
 	m.Get("/api/delete-mysql-datadir", this.DeleteMySQLDataDir)
+
+	// status
+	m.Get("/api/get-agent", this.getAgent)
+	m.Get("/api/lvs-snapshots", this.ListSnapshotsLogicalVolumes)         // ListSnapshotsLogicalVolumes lists logical volumes by pattern
+	m.Get("/api/mount", this.GetMount)                                    // GetMount shows the configured mount point's status
+	m.Get("/api/available-snapshots-local", this.AvailableLocalSnapshots) // LocalSnapshots lists dc-local available snapshots for this host
+	m.Get("/api/available-snapshots", this.AvailableSnapshots)            // Snapshots lists available snapshots for this host
+	m.Get("/api/mysql-du", this.MySQLDiskUsage)
+	m.Get("/api/mysql-error-log-tail", this.MySQLErrorLogTail)
+	m.Get("/api/mysql-port", this.MySQLPort)
+	m.Get("/api/mysql-status", this.MySQLRunning)
 	m.Get("/api/mysql-datadir-available-space", this.GetMySQLDataDirAvailableDiskSpace)
+
+	// seed proces
 	m.Get("/api/post-copy", this.PostCopy)
 	m.Get("/api/receive-mysql-seed-data/:seedId", this.ReceiveMySQLSeedData)
 	m.Get("/api/send-mysql-seed-data/:targetHost/:seedId", this.SendMySQLSeedData)
 	m.Get("/api/abort-seed/:seedId", this.AbortSeed)
 	m.Get("/api/seed-command-completed/:seedId", this.SeedCommandCompleted)
 	m.Get("/api/seed-command-succeeded/:seedId", this.SeedCommandSucceeded)
+
+	// misc
+	m.Get("/api/mysql-relaylog-contents-tail/:relaylog/:start", this.RelaylogContentsTail)
+	m.Post("/api/apply-relaylog-contents", this.ApplyRelaylogContents)
+	m.Get(config.Config.StatusEndpoint, this.Status)
+
+	// unused
+	m.Get("/api/mysql-binlog-binary-contents", this.BinlogBinaryContents)
 	m.Get("/api/mysql-relay-log-index-file", this.RelayLogIndexFile)
 	m.Get("/api/mysql-relay-log-files", this.RelayLogFiles)
 	m.Get("/api/mysql-relay-log-end-coordinates", this.RelayLogEndCoordinates)
 	m.Get("/api/mysql-binlog-contents", this.BinlogContents)
-	m.Get("/api/mysql-binlog-binary-contents", this.BinlogBinaryContents)
-	m.Get("/api/mysql-relaylog-contents-tail/:relaylog/:start", this.RelaylogContentsTail)
-	m.Post("/api/apply-relaylog-contents", this.ApplyRelaylogContents)
+	m.Get("/api/du", this.DiskUsage)
+	m.Get("/api/lv", this.LogicalVolume)
+	m.Get("/api/lv/:lv", this.LogicalVolume)
+	m.Get("/api/hostname", this.Hostname)
+	m.Get("/api/lvs", this.ListLogicalVolumes)
+	m.Get("/api/lvs/:pattern", this.ListLogicalVolumes)
+
+	// to delete
 	m.Get("/api/custom-commands/:cmd", this.RunCommand)
-	m.Get(config.Config.StatusEndpoint, this.Status)
 
 	// list all the /debug/ endpoints we want
 	m.Get("/debug/pprof", pprof.Index)

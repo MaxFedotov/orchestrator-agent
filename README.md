@@ -117,7 +117,7 @@ The following is a complete list of configuration parameters:
 * `SSLSkipVerify`                      (bool),   When connecting to **orchestrator** via SSL, whether to ignore certification error  
 * `SSLPrivateKeyFile`                  (string), When serving via `https`, location of SSL private key file
 * `SSLCertFile`                        (string), When serving via `https`, location of SSL certification file
-* `HttpTimeoutSeconds`                 (int),    HTTP GET request timeout (when connecting to _orchestrator_)
+* `HTTPTimeoutSeconds`                 (int),    HTTP GET request timeout (when connecting to _orchestrator_)
 
 An example configuration file may be:
 
@@ -147,7 +147,7 @@ An example configuration file may be:
     "SSLSkipVerify": false,
     "SSLCertFile": "",
     "SSLPrivateKeyFile": "",
-    "HttpTimeoutSeconds": 10
+    "HTTPTimeoutSeconds": 10
 }
 ```
 

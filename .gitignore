@@ -2,4 +2,6 @@
 .vendor/
 .gopath/
 .idea/
+bin/
+.vscode/
 *.log

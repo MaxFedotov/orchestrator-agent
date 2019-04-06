@@ -26,7 +26,7 @@ cat <<EOF > /etc/orchestrator-agent.conf.json
     "UseSSL": false,
     "SSLCertFile": "",
     "SSLPrivateKeyFile": "",
-    "HttpTimeoutSeconds": 10,
+    "HTTPTimeoutSeconds": 10,
     "ExecWithSudo": false,
     "CustomCommands": {
         "true": "/bin/true"

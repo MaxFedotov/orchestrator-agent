@@ -29,7 +29,7 @@ import (
 
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/inst"
-	"github.com/outbrain/golib/log"
+	"github.com/openark/golib/log"
 )
 
 const (
@@ -47,19 +47,24 @@ type LogicalVolume struct {
 	SnapshotPercent float64
 }
 
+// Mount describes a file system mount point
+type Mount struct {
+	Path           string
+	Device         string
+	LVPath         string
+	FileSystem     string
+	IsMounted      bool
+	DiskUsage      int64
+	MySQLDataPath  string
+	MySQLDiskUsage int64
+}
+
 func GetMySQLDataDir() (string, error) {
-	command := config.Config.MySQLDatadirCommand
-	output, err := commandOutput(command)
-	return strings.TrimSpace(fmt.Sprintf("%s", output)), err
+	return config.Config.MySQLDataDir, nil
 }
 
 func GetMySQLPort() (int64, error) {
-	command := config.Config.MySQLPortCommand
-	output, err := commandOutput(command)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseInt(strings.TrimSpace(fmt.Sprintf("%s", output)), 10, 0)
+	return config.Config.MySQLPort, nil
 }
 
 // GetRelayLogIndexFileName attempts to find the relay log index file under the mysql datadir
@@ -240,18 +245,6 @@ func (this *LogicalVolume) IsSnapshotValid() bool {
 		return false
 	}
 	return true
-}
-
-// Mount describes a file system mount point
-type Mount struct {
-	Path           string
-	Device         string
-	LVPath         string
-	FileSystem     string
-	IsMounted      bool
-	DiskUsage      int64
-	MySQLDataPath  string
-	MySQLDiskUsage int64
 }
 
 func init() {
@@ -488,7 +481,7 @@ func DeleteMySQLDataDir() error {
 	if path.Dir(directory) == directory {
 		return errors.New(fmt.Sprintf("Directory %s seems to be root; refusing to delete", directory))
 	}
-	_, err = commandOutput(config.Config.MySQLDeleteDatadirContentCommand)
+	_, err = commandOutput("echo 1")
 
 	return err
 }

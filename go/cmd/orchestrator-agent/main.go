@@ -26,7 +26,7 @@ import (
 	"github.com/github/orchestrator-agent/go/agent"
 	"github.com/github/orchestrator-agent/go/app"
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/outbrain/golib/log"
+	"github.com/openark/golib/log"
 )
 
 var AppVersion string
@@ -40,10 +40,10 @@ func acceptSignal() {
 	log.Fatalf("Got signal: %+v", sig)
 }
 
-// main is the application's entry point. It will either spawn a CLI or HTTP itnerfaces.
+// main is the application's entry point. It will either spawn a CLI or HTTP interfaces.
 func main() {
 	configFile := flag.String("config", "", "config file name")
-	verbose := flag.Bool("verbose", false, "verbose")
+	verbose := flag.Bool("verbose", true, "verbose")
 	debug := flag.Bool("debug", false, "debug mode (very verbose)")
 	stack := flag.Bool("stack", false, "add stack trace upon error")
 	flag.Parse()
@@ -68,8 +68,10 @@ func main() {
 	if len(*configFile) > 0 {
 		config.ForceRead(*configFile)
 	} else {
-		config.Read("/etc/orchestrator-agent.conf.json", "conf/orchestrator-agent.conf.json", "orchestrator-agent.conf.json")
+		config.Read([]string{"/etc/orchestrator-agent.conf.json", "/conf/orchestrator-agent.conf.json", "orchestrator-agent.conf.json"}, "appconfig")
 	}
+
+	config.Read([]string{"/etc/my.cnf", "/etc/mysql/my.cnf", "/usr/etc/my.cnf"}, "mysqlconfig")
 
 	if len(config.Config.AgentsServer) == 0 {
 		log.Fatal("AgentsServer unconfigured. Please set to the HTTP address orchestrator serves agents (port is by default 3001)")
@@ -81,6 +83,8 @@ func main() {
 		err := ioutil.WriteFile(config.Config.TokenHintFile, []byte(agent.ProcessToken.Hash), 0644)
 		log.Errore(err)
 	}
+
+	go config.WatchMySQLConf()
 
 	go acceptSignal()
 
