@@ -5,6 +5,7 @@ set -e
 . script/bootstrap
 
 mkdir -p bin
+mkdir -p bin/plugins
 bindir="$PWD"/bin
 scriptdir="$PWD"/script
 
@@ -18,3 +19,7 @@ cd .gopath/src/github.com/github/orchestrator-agent
 
 # We put the binaries directly into the bindir, because we have no need for shim wrappers
 go build -o "$bindir/orchestrator-agent" -ldflags "-X main.AppVersion=${version} -X main.BuildDescribe=${describe}" ./go/cmd/orchestrator-agent/main.go
+for file in $(find go/plugins -name "*.go")
+do
+    go build -buildmode=plugin -o "$bindir/plugins/$(basename $file .go).so" ./$file
+done

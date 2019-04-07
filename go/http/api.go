@@ -272,7 +272,7 @@ func (this *HttpAPI) getAgent(params martini.Params, r render.Render, req *http.
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output := agent.OrchAgent.GetAgentInfo()
+	output := agent.OrchestratorAgent.GetAgentInfo()
 	r.JSON(200, output)
 }
 

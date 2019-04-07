@@ -22,6 +22,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"plugin"
+	"strings"
 	"time"
 
 	"github.com/github/orchestrator-agent/go/config"
@@ -30,13 +33,14 @@ import (
 )
 
 // OrchAgent initializes new orchestrator-agent instance
-var OrchAgent = *initializeAgent()
+var OrchestratorAgent = *initializeAgent()
 
 // Agent represents basic agent data and methods
 type Agent struct {
-	Hostname string
-	Port     uint
-	Token    string
+	Hostname      string
+	Port          uint
+	Token         string
+	BackupPlugins map[string]BackupPlugin
 }
 
 // AgentInfo presents the data of an agent
@@ -84,11 +88,19 @@ type Mount struct {
 	DiskUsage  int64
 }
 
-var httpTimeout = time.Duration(time.Duration(config.Config.HTTPTimeoutSeconds) * time.Second)
+type BackupPlugin interface {
+	Backup()
+	Restore()
+	GetMetadata()
+	SupportedEngines() []string
+	IsAvailiable() bool
+}
 
-var httpClient = &http.Client{}
-
-var LastTalkback time.Time
+var (
+	httpTimeout  = time.Duration(time.Duration(config.Config.HTTPTimeoutSeconds) * time.Second)
+	httpClient   = &http.Client{}
+	LastTalkback time.Time
+)
 
 func dialTimeout(network, addr string) (net.Conn, error) {
 	return net.DialTimeout(network, addr, httpTimeout)
@@ -98,8 +110,8 @@ func dialTimeout(network, addr string) (net.Conn, error) {
 func httpGet(url string) (resp *http.Response, err error) {
 	tlsConfig, _ := buildTLS()
 	httpTransport := &http.Transport{
-		TLSClientConfig:       tlsConfig,
-		Dial:                  dialTimeout,
+		TLSClientConfig: tlsConfig,
+		Dial:            dialTimeout,
 		ResponseHeaderTimeout: httpTimeout,
 	}
 	httpClient.Transport = httpTransport
@@ -123,10 +135,10 @@ func ContinuousOperation() {
 	tick := time.Tick(time.Duration(config.Config.ContinuousPollSeconds) * time.Second)
 	resubmitTick := time.Tick(time.Duration(config.Config.ResubmitAgentIntervalMinutes) * time.Minute)
 
-	OrchAgent.submitAgent()
+	OrchestratorAgent.submitAgent()
 	for range tick {
 		// Do stuff
-		if err := OrchAgent.pingServer(); err != nil {
+		if err := OrchestratorAgent.pingServer(); err != nil {
 			log.Warning("Failed to ping orchestrator server")
 		} else {
 			LastTalkback = time.Now()
@@ -135,7 +147,7 @@ func ContinuousOperation() {
 		// See if we should also forget instances/agents (lower frequency)
 		select {
 		case <-resubmitTick:
-			OrchAgent.submitAgent()
+			OrchestratorAgent.submitAgent()
 		default:
 		}
 	}
@@ -143,9 +155,16 @@ func ContinuousOperation() {
 
 func initializeAgent() *Agent {
 	agent := Agent{}
+	workingDir, err := os.Getwd()
+	if err != nil {
+		log.Fatal("Unable to get working directory")
+	}
 	agent.Hostname, _ = os.Hostname()
 	agent.Port = config.Config.HTTPPort
 	agent.Token = ProcessToken.Hash
+	agent.BackupPlugins, _ = InitilizePlugins(filepath.Join(workingDir, "plugins"))
+	//agent.BackupPlugins["mysqldump"].Backup()
+	//agent.BackupPlugins["mydumper"].Backup()
 	return &agent
 }
 
@@ -172,6 +191,36 @@ func (agent Agent) pingServer() error {
 	}
 	defer response.Body.Close()
 	return nil
+}
+
+func InitilizePlugins(pluginDir string) (map[string]BackupPlugin, error) {
+	plugins := make(map[string]BackupPlugin)
+	pluginFiles, err := filepath.Glob(filepath.Join(pluginDir, "*.so"))
+	if err != nil {
+		return nil, log.Fatalf("Unable to get plugins from %s", pluginDir)
+	}
+	if pluginFiles == nil {
+		log.Errorf("No plugins found in %s", pluginDir)
+	}
+	for _, file := range pluginFiles {
+		var newBackupPlugin BackupPlugin
+		pluginName := strings.TrimSuffix(filepath.Base(file), filepath.Ext(filepath.Base(file)))
+		plug, err := plugin.Open(file)
+		if err != nil {
+			log.Errorf("Unable to load plugin %s from %s: %s", filepath.Base(file), pluginDir, err)
+		}
+		loadedPlugin, err := plug.Lookup("BackupPlugin")
+		if err != nil {
+			log.Errorf("Error loading plugin %s from %s: %s", filepath.Base(file), pluginDir, err)
+		}
+		newBackupPlugin, ok := loadedPlugin.(BackupPlugin)
+		if !ok {
+			log.Errorf("Error loading plugin %s from %s", filepath.Base(file), pluginDir)
+		}
+		plugins[pluginName] = newBackupPlugin
+		log.Infof("Succesfully loaded %s plugin", pluginName)
+	}
+	return plugins, err
 }
 
 // GetAgentInfo returns information about agent to orchestrator
@@ -219,6 +268,11 @@ func (agent Agent) GetAgentInfo() AgentInfo {
 	agentInfo.MySQLDatabases, err = getMySQLDatabases(config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, config.Config.MySQLPort)
 	if err != nil {
 		log.Errore(err)
+	}
+	for plugin := range agent.BackupPlugins {
+		if agent.BackupPlugins[plugin].IsAvailiable() {
+			agentInfo.AvailiableSeedMethods = append(agentInfo.AvailiableSeedMethods, plugin)
+		}
 	}
 	return agentInfo
 }

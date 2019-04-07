@@ -1,6 +1,6 @@
 #!/bin/bash
 
-GO_VERSION=go1.9.4
+GO_VERSION=go1.12.2
 
 GO_PKG_DARWIN=${GO_VERSION}.darwin-amd64.pkg
 GO_PKG_DARWIN_SHA=e8523ffa01df5fcd51c3dbaca3e951bc716cfcc5d95273f7d4f64c94fdc80082
@@ -13,7 +13,7 @@ cd $ROOTDIR
 
 # If Go isn't installed globally, setup environment variables for local install.
 if [ -z "$(which go)" ] || [ -z "$(go version | grep $GO_VERSION)" ]; then
-  GODIR="$ROOTDIR/.vendor/go19"
+  GODIR="$ROOTDIR/.vendor/go112"
 
   if [ $(uname -s) = "Darwin" ]; then
     export GOROOT="$GODIR/usr/local/go"

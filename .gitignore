@@ -5,3 +5,5 @@
 bin/
 .vscode/
 *.log
+go/cmd/orchestrator-agent/plugins
+.DS_Store
