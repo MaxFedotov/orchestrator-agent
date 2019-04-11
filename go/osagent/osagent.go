@@ -63,7 +63,7 @@ func GetMySQLDataDir() (string, error) {
 	return config.Config.MySQLDataDir, nil
 }
 
-func GetMySQLPort() (int64, error) {
+func GetMySQLPort() (int, error) {
 	return config.Config.MySQLPort, nil
 }
 

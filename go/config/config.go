@@ -35,6 +35,7 @@ type Configuration struct {
 	AvailableLocalSnapshotHostsCommand string            // Command which returns list of hosts (one host per line) with available snapshots in local datacenter
 	AvailableSnapshotHostsCommand      string            // Command which returns list of hosts (one host per line) with available snapshots in any datacenter
 	SnapshotVolumesFilter              string            // text pattern filtering agent logical volumes that are valid snapshots
+	PreferStreaming                    bool              // If true, will prefer using backup streaming
 	MySQLServiceStopCommand            string            // Command to stop mysql, e.g. /etc/init.d/mysql stop
 	MySQLServiceStartCommand           string            // Command to start mysql, e.g. /etc/init.d/mysql start
 	MySQLServiceRestartCommand         string            // Command to restart mysql, e.g. /etc/init.d/mysql restart
@@ -46,8 +47,8 @@ type Configuration struct {
 	PostCopyCommand                    string            // command that is executed after seed is done and before MySQL starts
 	MySQLClientCommand                 string            // the `mysql` command, including ny neccesary credentials, to apply relay logs. This would be a fully-privileged account entry. Example: "mysql -uroot -p123456" or "mysql --defaults-file=/root/.my.cnf"
 	AgentsServer                       string            // HTTP address of the orchestrator agents server
-	AgentsServerPort                   string            // HTTP port of the orchestrator agents server
-	HTTPPort                           uint              // HTTP port on which this service listens
+	AgentsServerPort                   int               // HTTP port of the orchestrator agents server
+	HTTPPort                           int               // HTTP port on which this service listens
 	HTTPAuthUser                       string            // Username for HTTP Basic authentication (blank disables authentication)
 	HTTPAuthPassword                   string            // Password for HTTP Basic authentication
 	UseSSL                             bool              // If true, service will serve HTTPS only
@@ -69,7 +70,7 @@ type Configuration struct {
 	MySQLTopologyPassword              string            // Password for MySQL user used by orchestrator-agent to connect to MySQL
 	MySQLReplicationUser               string            // Username used to setup MySQL replication
 	MySQLReplicationPassword           string            // Password for MySQLReplicationUser
-	MySQLPort                          int64             // Port on which mysqld is listening. Read from my.cnf
+	MySQLPort                          int               // Port on which mysqld is listening. Read from my.cnf
 	MySQLDataDir                       string            // Location of MySQL datadir. Read from my.cnf
 	MySQLErrorLog                      string            // Location of MySQL error log file. Read from my.cnf
 	MySQLInnoDBLogDir                  string            // Location of ib_logfile. Read from my.cnf
@@ -78,6 +79,8 @@ type Configuration struct {
 	MyDumperParallelThreads            int               // Number of threads MyDumper\MyLoader will use for dumping and restoring data
 	MyDumperRowsChunkSize              int               // Split table into chunks of this many rows. 0 - unlimited
 	CompressLogicalBackup              bool              // Compress output mydumper/mysqldump files
+	Datacenter                         string            // Datacenter, which host belongs to
+	Cluster                            string            // Cluster, which host belongs to
 	sync.RWMutex
 }
 
@@ -94,6 +97,7 @@ func newConfiguration() *Configuration {
 		AvailableLocalSnapshotHostsCommand: "",
 		AvailableSnapshotHostsCommand:      "",
 		SnapshotVolumesFilter:              "",
+		PreferStreaming:                    true,
 		MySQLServiceStopCommand:            "",
 		MySQLServiceStartCommand:           "",
 		MySQLServiceRestartCommand:         "",
@@ -105,7 +109,7 @@ func newConfiguration() *Configuration {
 		PostCopyCommand:                    "",
 		MySQLClientCommand:                 "mysql",
 		AgentsServer:                       "",
-		AgentsServerPort:                   "",
+		AgentsServerPort:                   3001,
 		HTTPPort:                           3002,
 		HTTPAuthUser:                       "",
 		HTTPAuthPassword:                   "",
@@ -137,6 +141,8 @@ func newConfiguration() *Configuration {
 		MyDumperParallelThreads:            1,
 		MyDumperRowsChunkSize:              0,
 		CompressLogicalBackup:              true,
+		Datacenter:                         "",
+		Cluster:                            "",
 	}
 }
 
@@ -182,7 +188,7 @@ func readINI(fileName string) (*Configuration, error) {
 	} else {
 		Config.MySQLErrorLog = sec.Key("log_error").String()
 	}
-	Config.MySQLPort, _ = sec.Key("port").Int64()
+	Config.MySQLPort, _ = sec.Key("port").Int()
 	Config.MySQLDataDir = sec.Key("datadir").String()
 	Config.MySQLInnoDBLogDir = sec.Key("innodb_log_group_home_dir").String()
 	if _, ok := confFiles["MySQL"]; !ok {

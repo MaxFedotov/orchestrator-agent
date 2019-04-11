@@ -1,13 +1,14 @@
 {
     "SnapshotMountPoint": "/tmp",
     "AgentsServer": "http://localhost",
-    "AgentsServerPort": ":3001",
+    "AgentsServerPort": 3001,
     "ContinuousPollSeconds" : 10,
     "ResubmitAgentIntervalMinutes": 60,
     "CreateSnapshotCommand": "echo 'no action'",
     "AvailableLocalSnapshotHostsCommand": "echo 127.0.0.1",
     "AvailableSnapshotHostsCommand": "echo localhost\n127.0.0.1",
     "SnapshotVolumesFilter": "-my-snapshot-",
+    "PreferStreaming": true,
     "MySQLDatadirCommand": "echo '~/tmp'",
     "MySQLPortCommand": "echo '3306'",
     "MySQLDeleteDatadirContentCommand": "echo 'will not do'",
@@ -39,5 +40,7 @@
     "XtrabackupParallelThreads": 5,
     "MyDumperParallelThreads": 4,
     "MyDumperRowsChunkSize": 0,
-    "CompressLogicalBackup": true
+    "CompressLogicalBackup": true,
+    "Datacenter": "DC1",
+    "Cluster": "Cluster1"
 }
