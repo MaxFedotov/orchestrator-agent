@@ -35,12 +35,11 @@ type Configuration struct {
 	AvailableLocalSnapshotHostsCommand string            // Command which returns list of hosts (one host per line) with available snapshots in local datacenter
 	AvailableSnapshotHostsCommand      string            // Command which returns list of hosts (one host per line) with available snapshots in any datacenter
 	SnapshotVolumesFilter              string            // text pattern filtering agent logical volumes that are valid snapshots
-	PreferStreaming                    bool              // If true, will prefer using backup streaming
 	MySQLServiceStopCommand            string            // Command to stop mysql, e.g. /etc/init.d/mysql stop
 	MySQLServiceStartCommand           string            // Command to start mysql, e.g. /etc/init.d/mysql start
 	MySQLServiceRestartCommand         string            // Command to restart mysql, e.g. /etc/init.d/mysql restart
 	MySQLServiceStatusCommand          string            // Command to check mysql status. Expects 0 return value when running, non-zero when not running, e.g. /etc/init.d/mysql status
-	MySQLBackupDir                     string            // Path to directory on host where backup files will be stored
+	BackupDir                          string            // Path to directory on host where backup files will be stored
 	SeedPort                           int               // Port used for transfering backup data
 	ReceiveSeedDataCommand             string            // Accepts incoming data (e.g. tarball over netcat)
 	SendSeedDataCommand                string            // Sends date to remote host (e.g. tarball via netcat)
@@ -97,12 +96,11 @@ func newConfiguration() *Configuration {
 		AvailableLocalSnapshotHostsCommand: "",
 		AvailableSnapshotHostsCommand:      "",
 		SnapshotVolumesFilter:              "",
-		PreferStreaming:                    true,
 		MySQLServiceStopCommand:            "",
 		MySQLServiceStartCommand:           "",
 		MySQLServiceRestartCommand:         "",
 		MySQLServiceStatusCommand:          "",
-		MySQLBackupDir:                     "",
+		BackupDir:                          "",
 		SeedPort:                           21234,
 		ReceiveSeedDataCommand:             "",
 		SendSeedDataCommand:                "",

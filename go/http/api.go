@@ -26,6 +26,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/github/orchestrator-agent/go/agent"
@@ -272,7 +273,7 @@ func (this *HttpAPI) getAgent(params martini.Params, r render.Render, req *http.
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output := agent.OrchestratorAgent.GetAgentInfo()
+	output := agent.Agent.GetAgentInfo()
 	r.JSON(200, output)
 }
 
@@ -601,33 +602,117 @@ func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *htt
 	}
 }
 
+// Backup initiates a process of backup
+func (this *HttpAPI) Backup(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	var databases []string
+	targetHost := params["targetHost"]
+	seedMethod := params["seedMethod"]
+	seedID := params["seedID"]
+	if params["databases"] != "" {
+		databases = strings.Split(params["databases"], ",")
+	}
+	err := agent.Agent.Backup(seedID, seedMethod, targetHost, databases)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
+// Receive is called on targetHost to get backup data
+func (this *HttpAPI) Receive(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	err := agent.Agent.Receive(params["seedID"], params["seedMethod"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
+// Restore is called on targetHost to get restore backup
+func (this *HttpAPI) Restore(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	err := agent.Agent.Restore(params["seedID"], params["seedMethod"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
+// Prepare is called before seed process
+func (this *HttpAPI) Prepare(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	err := agent.Agent.Prepare(params["seedID"], params["seedMethod"], params["hostType"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
+// Cleanup is called after seed process
+func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	err := agent.Agent.Cleanup(params["seedID"], params["seedMethod"], params["hostType"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, err == nil)
+}
+
+// GetMedatada returns backup metadata
+func (this *HttpAPI) GetMedatada(params martini.Params, r render.Render, req *http.Request) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	output, err := agent.Agent.GetMetadata(params["seedID"], params["seedMethod"])
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, output)
+}
+
 // RegisterRequests makes for the de-facto list of known API calls
 func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 
 	// commands LVM
-	m.Get("/api/mountlv", this.MountLV)                // MountLV mounts a logical volume on config mount point (Backup)
-	m.Get("/api/removelv", this.RemoveLV)              // RemoveLV removes a logical volume
+	m.Get("/api/mountlv", this.MountLV)                // MountLV mounts a snapshot on config mount point (Backup)
+	m.Get("/api/removelv", this.RemoveLV)              // RemoveLV removes a snapshot
 	m.Get("/api/umount", this.Unmount)                 // Unmount umounts the config mount point (Cleanup)
 	m.Get("/api/create-snapshot", this.CreateSnapshot) // CreateSnapshot creates snapshot for this host
 
 	// commands MySQL
 	m.Get("/api/mysql-stop", this.MySQLStop)
 	m.Get("/api/mysql-start", this.MySQLStart)
-	m.Get("/api/delete-mysql-datadir", this.DeleteMySQLDataDir)
 
 	// status
 	m.Get("/api/get-agent", this.getAgent)
-	m.Get("/api/lvs-snapshots", this.ListSnapshotsLogicalVolumes)         // ListSnapshotsLogicalVolumes lists logical volumes by pattern
-	m.Get("/api/mount", this.GetMount)                                    // GetMount shows the configured mount point's status
-	m.Get("/api/available-snapshots-local", this.AvailableLocalSnapshots) // LocalSnapshots lists dc-local available snapshots for this host
-	m.Get("/api/available-snapshots", this.AvailableSnapshots)            // Snapshots lists available snapshots for this host
-	m.Get("/api/mysql-du", this.MySQLDiskUsage)
-	m.Get("/api/mysql-error-log-tail", this.MySQLErrorLogTail)
-	m.Get("/api/mysql-port", this.MySQLPort)
-	m.Get("/api/mysql-status", this.MySQLRunning)
-	m.Get("/api/mysql-datadir-available-space", this.GetMySQLDataDirAvailableDiskSpace)
 
-	// seed proces
+	// seed process
+	m.Get("/api/backup/:seedId/:seedMethod/:targetHost", this.Backup)
+	m.Get("/api/backup/:seedId/:seedMethod/:targetHost/:databases", this.Backup)
+	m.Get("/api/prepare/:seedID/:seedMethod/:hostType", this.Prepare)
+	m.Get("/api/receive/:seedID/:seedMethod", this.Receive)
+	m.Get("/api/restore/:seedID/:seedMethod", this.Restore)
+	m.Get("/api/cleanup/:seedID/:seedMethod/:hostType", this.Cleanup)
+	m.Get("/api/get-metadata/:seedID/:seedMethod", this.GetMedatada)
+
+	// ??
 	m.Get("/api/post-copy", this.PostCopy)
 	m.Get("/api/receive-mysql-seed-data/:seedId", this.ReceiveMySQLSeedData)
 	m.Get("/api/send-mysql-seed-data/:targetHost/:seedId", this.SendMySQLSeedData)
@@ -635,12 +720,17 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/seed-command-completed/:seedId", this.SeedCommandCompleted)
 	m.Get("/api/seed-command-succeeded/:seedId", this.SeedCommandSucceeded)
 
-	// misc
-	m.Get("/api/mysql-relaylog-contents-tail/:relaylog/:start", this.RelaylogContentsTail)
-	m.Post("/api/apply-relaylog-contents", this.ApplyRelaylogContents)
-	m.Get(config.Config.StatusEndpoint, this.Status)
-
-	// unused
+	// to delete
+	m.Get("/api/delete-mysql-datadir", this.DeleteMySQLDataDir)
+	m.Get("/api/mysql-du", this.MySQLDiskUsage)
+	m.Get("/api/mysql-error-log-tail", this.MySQLErrorLogTail)
+	m.Get("/api/mysql-port", this.MySQLPort)
+	m.Get("/api/mysql-status", this.MySQLRunning)
+	m.Get("/api/available-snapshots-local", this.AvailableLocalSnapshots) // LocalSnapshots lists dc-local available snapshots for this host
+	m.Get("/api/available-snapshots", this.AvailableSnapshots)            // Snapshots lists available snapshots for this host
+	m.Get("/api/mysql-datadir-available-space", this.GetMySQLDataDirAvailableDiskSpace)
+	m.Get("/api/lvs-snapshots", this.ListSnapshotsLogicalVolumes) // ListSnapshotsLogicalVolumes lists logical volumes by pattern
+	m.Get("/api/mount", this.GetMount)                            // GetMount shows the configured mount point's status
 	m.Get("/api/mysql-binlog-binary-contents", this.BinlogBinaryContents)
 	m.Get("/api/mysql-relay-log-index-file", this.RelayLogIndexFile)
 	m.Get("/api/mysql-relay-log-files", this.RelayLogFiles)
@@ -652,6 +742,11 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/hostname", this.Hostname)
 	m.Get("/api/lvs", this.ListLogicalVolumes)
 	m.Get("/api/lvs/:pattern", this.ListLogicalVolumes)
+
+	// misc
+	m.Get("/api/mysql-relaylog-contents-tail/:relaylog/:start", this.RelaylogContentsTail)
+	m.Post("/api/apply-relaylog-contents", this.ApplyRelaylogContents)
+	m.Get(config.Config.StatusEndpoint, this.Status)
 
 	// to delete
 	m.Get("/api/custom-commands/:cmd", this.RunCommand)

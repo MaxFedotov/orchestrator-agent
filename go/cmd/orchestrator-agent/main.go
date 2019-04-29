@@ -84,6 +84,8 @@ func main() {
 		log.Errore(err)
 	}
 
+	agent.InitializeAgent()
+
 	go config.WatchMySQLConf()
 
 	go acceptSignal()

@@ -1,22 +1,12 @@
 {
-    "SnapshotMountPoint": "/tmp",
+    "SeedWeight": 10,
     "AgentsServer": "http://localhost",
     "AgentsServerPort": 3001,
     "ContinuousPollSeconds" : 10,
     "ResubmitAgentIntervalMinutes": 60,
-    "CreateSnapshotCommand": "echo 'no action'",
-    "AvailableLocalSnapshotHostsCommand": "echo 127.0.0.1",
-    "AvailableSnapshotHostsCommand": "echo localhost\n127.0.0.1",
-    "SnapshotVolumesFilter": "-my-snapshot-",
-    "PreferStreaming": true,
-    "MySQLDatadirCommand": "echo '~/tmp'",
-    "MySQLPortCommand": "echo '3306'",
-    "MySQLDeleteDatadirContentCommand": "echo 'will not do'",
     "MySQLServiceStopCommand":      "brew services stop mysql",
     "MySQLServiceStartCommand":     "brew services start mysql",
     "MySQLServiceStatusCommand":    "brew services list | grep mysql",
-    "ReceiveSeedDataCommand":       "echo 'not implemented here'",
-    "SendSeedDataCommand":          "echo 'not implemented here'",
     "PostCopyCommand":              "echo 'post copy'",
     "HTTPPort": 3002,
     "HTTPAuthUser": "",
@@ -34,7 +24,7 @@
     "MySQLTopologyPassword": "orc_client_password",
     "MySQLReplicationUser": "replicator",
     "MySQLReplicationPassword": "replicatorpassword",
-    "MySQLBackupDir": "/tmp/bkp/",
+    "BackupDir": "/tmp/bkp/",
     "MySQLBackupOldDatadir": false,
     "SeedPort": 21234,
     "XtrabackupParallelThreads": 5,
@@ -42,5 +32,22 @@
     "MyDumperRowsChunkSize": 0,
     "CompressLogicalBackup": true,
     "Datacenter": "DC1",
-    "Cluster": "Cluster1"
+    "Cluster": "Cluster1",
+    "Plugins": {
+        "LVM": {
+            "SnapshotSize": "1G",
+            "SnapshotVolumeGroup": "mysql",
+            "SnapshotLogicalVolume": "datadir"
+        }
+    },
+    "SnapshotMountPoint": "/tmp",
+    "SnapshotVolumesFilter": "mysql",
+    "CreateSnapshotCommand": "lvcreate --size 1G --snapshot --name mysql_backup_1 /dev/mapper/mysql-datadir",
+    "AvailableLocalSnapshotHostsCommand": "echo 127.0.0.1",
+    "AvailableSnapshotHostsCommand": "echo localhost\n127.0.0.1",
+    "MySQLDatadirCommand": "echo '~/tmp'",
+    "MySQLPortCommand": "echo '3306'",
+    "MySQLDeleteDatadirContentCommand": "echo 'will not do'",
+    "ReceiveSeedDataCommand":       "echo 'not implemented here'",
+    "SendSeedDataCommand":          "echo 'not implemented here'"
 }

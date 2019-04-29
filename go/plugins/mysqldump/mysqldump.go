@@ -4,7 +4,11 @@ import (
 	"fmt"
 )
 
-type mysqldump struct{}
+type mysqldump struct {
+	engines        []string
+	streaming      bool
+	physicalBackup bool
+}
 
 const (
 	mysqlbackupFileName           = "backup.sql"
@@ -12,26 +16,38 @@ const (
 )
 
 func (m mysqldump) Backup() {
-	fmt.Println("This is mysqldump backup")
+	fmt.Println("This is lvm backup")
 }
 
 func (m mysqldump) Restore() {
-	fmt.Println("This is mysqldump restore")
+	fmt.Println("This is lvm restore")
 }
 
 func (m mysqldump) GetMetadata() {
-	fmt.Println("This is mysqldump metadata")
+	fmt.Println("This is lvm metadata")
 }
 
 func (m mysqldump) SupportedEngines() []string {
-	return []string{"InnoDB", "MyISAM", "ROCKSDB", "TokuDB"}
+	return m.engines
 }
 
 func (m mysqldump) IsAvailiable() bool {
 	return true
 }
 
-var BackupPlugin = mysqldump{}
+func (m mysqldump) SupportStreaming() bool {
+	return m.streaming
+}
+
+func (m mysqldump) SupportPhysicalBackup() bool {
+	return m.physicalBackup
+}
+
+var BackupPlugin = mysqldump{
+	engines:        []string{"InnoDB", "MyISAM", "ROCKSDB", "TokuDB"},
+	streaming:      true,
+	physicalBackup: false,
+}
 
 func main() {
 

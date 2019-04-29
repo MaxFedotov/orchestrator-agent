@@ -19,74 +19,20 @@ package agent
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/openark/golib/log"
+	"github.com/github/orchestrator-agent/go/functions"
 )
 
-// Add sudo to a command if we're configured to do so.  Otherwise just a signifier of a
-// privileged command
-func sudoCmd(commandText string) string {
-	if config.Config.ExecWithSudo {
-		return "sudo " + commandText
-	}
-	return commandText
-}
-
-func execCmd(commandText string) (*exec.Cmd, string, error) {
-	commandBytes := []byte(commandText)
-	tmpFile, err := ioutil.TempFile("", "orchestrator-agent-cmd-")
-	if err != nil {
-		return nil, "", err
-	}
-	ioutil.WriteFile(tmpFile.Name(), commandBytes, 0644)
-	log.Debugf("execCmd: %s", commandText)
-	return exec.Command("bash", tmpFile.Name()), tmpFile.Name(), nil
-}
-
-// commandOutput executes a command and return output bytes
-func commandOutput(commandText string) ([]byte, error) {
-	cmd, tmpFileName, err := execCmd(commandText)
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(tmpFileName)
-
-	outputBytes, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("error executing command '%s' - %+v", commandText, err)
-	}
-
-	return outputBytes, nil
-}
-
-func outputLines(commandOutput []byte, err error) ([]string, error) {
-	if err != nil {
-		return nil, err
-	}
-	text := strings.Trim(fmt.Sprintf("%s", commandOutput), "\n")
-	lines := strings.Split(text, "\n")
-	return lines, err
-}
-
-func outputTokens(delimiterPattern string, commandOutput []byte, err error) ([][]string, error) {
-	lines, err := outputLines(commandOutput, err)
-	if err != nil {
-		return nil, err
-	}
-	tokens := make([][]string, len(lines))
-	for i := range tokens {
-		tokens[i] = regexp.MustCompile(delimiterPattern).Split(lines[i], -1)
-	}
-	return tokens, err
+func init() {
+	osPath := os.Getenv("PATH")
+	os.Setenv("PATH", fmt.Sprintf("%s:/usr/sbin:/usr/bin:/sbin:/bin", osPath))
 }
 
 func availableSnapshots(requireLocal bool) ([]string, error) {
@@ -99,8 +45,8 @@ func availableSnapshots(requireLocal bool) ([]string, error) {
 		command = config.Config.AvailableSnapshotHostsCommand
 		errorMessage = "Unable to get snapshots info:"
 	}
-	output, err := commandOutput(command)
-	hosts, err := outputLines(output, err)
+	output, err := functions.CommandOutput(command)
+	hosts, err := functions.OutputLines(output, err)
 	if err != nil {
 		return []string{}, fmt.Errorf("%s %+v", errorMessage, err)
 	}
@@ -110,8 +56,8 @@ func availableSnapshots(requireLocal bool) ([]string, error) {
 
 func logicalVolumes(volumeName string, filterPattern string) ([]LogicalVolume, error) {
 	logicalVolumes := []LogicalVolume{}
-	output, err := commandOutput(sudoCmd(fmt.Sprintf("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent %s", volumeName)))
-	tokens, err := outputTokens(`[ \t]+`, output, err)
+	output, err := functions.CommandOutput(functions.SudoCmd(fmt.Sprintf(" lvs --noheading -o lv_name,vg_name,lv_path,snap_percent,time --sort -time %s", volumeName)))
+	tokens, err := functions.OutputTokens(`[ \t]+`, output, err)
 	if err != nil {
 		return logicalVolumes, fmt.Errorf("Unable to get logical volumes info: %+v", err)
 	}
@@ -122,6 +68,7 @@ func logicalVolumes(volumeName string, filterPattern string) ([]LogicalVolume, e
 			Path:      lineTokens[3],
 		}
 		logicalVolume.SnapshotPercent, err = strconv.ParseFloat(lineTokens[4], 32)
+		logicalVolume.SnapshotDate, err = time.Parse("2019-04-15 13:08:56 +0000", lineTokens[5])
 		logicalVolume.IsSnapshot = (err == nil)
 		if strings.Contains(logicalVolume.Name, filterPattern) {
 			logicalVolumes = append(logicalVolumes, logicalVolume)
@@ -136,8 +83,8 @@ func getMount(mountPoint string) Mount {
 		IsMounted: false,
 	}
 
-	output, err := commandOutput(fmt.Sprintf("grep %s /etc/mtab", mountPoint))
-	tokens, err := outputTokens(`[ \t]+`, output, err)
+	output, err := functions.CommandOutput(fmt.Sprintf("grep %s /etc/mtab", mountPoint))
+	tokens, err := functions.OutputTokens(`[ \t]+`, output, err)
 	if err != nil {
 		// when grep does not find rows, it returns an error. So this is actually OK
 		return mount
@@ -162,7 +109,7 @@ func getLogicalVolumePath(volumeName string) (string, error) {
 }
 
 func mySQLRunning() bool {
-	_, err := commandOutput(config.Config.MySQLServiceStatusCommand)
+	_, err := functions.CommandOutput(config.Config.MySQLServiceStatusCommand)
 	// status command exits with 0 when MySQL is running, or otherwise if not running
 	return err == nil
 }
@@ -203,7 +150,7 @@ func getDirectorySize(path string) (int64, error) {
 }
 
 func mySQLErrorLogTail(errorLogPath string) ([]string, error) {
-	output, err := commandOutput(sudoCmd(fmt.Sprintf("tail -n 20 %s", errorLogPath)))
-	tail, err := outputLines(output, err)
+	output, err := functions.CommandOutput(functions.SudoCmd(fmt.Sprintf("tail -n 20 %s", errorLogPath)))
+	tail, err := functions.OutputLines(output, err)
 	return tail, err
 }

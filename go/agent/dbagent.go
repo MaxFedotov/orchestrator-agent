@@ -17,47 +17,25 @@
 package agent
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/github/orchestrator-agent/go/config"
+	"github.com/github/orchestrator-agent/go/functions"
 	"github.com/openark/golib/sqlutils"
 )
 
-func openConnection(user string, password string, port int64) (*sql.DB, error) {
-	mysqlURI := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?interpolateParams=true&timeout=1s",
-		user,
-		password,
-		"localhost",
-		port,
-		"mysql",
-	)
-	db, _, err := sqlutils.GetDB(mysqlURI)
-	db.SetMaxIdleConns(0)
-	err = db.Ping()
-	return db, err
-}
-
-func queryData(user string, password string, port int64, query string, argsArray []interface{}, onRow func(sqlutils.RowMap) error) error {
-	db, err := openConnection(user, password, port)
-	if err != nil {
-		return err
-	}
-	return sqlutils.QueryRowsMap(db, query, onRow, argsArray...)
-}
-
-func getInnoDBLogSize(user string, password string, port int64) (innoDBLogSize int64, err error) {
+func getInnoDBLogSize(user string, password string, port int) (innoDBLogSize int64, err error) {
 	query := `SELECT @@innodb_log_file_size*@@innodb_log_files_in_group AS logFileSize;`
-	err = queryData(user, password, port, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
+	err = functions.QueryData(user, password, port, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		innoDBLogSize = m.GetInt64("logFileSize")
 		return nil
 	})
 	return innoDBLogSize, err
 }
 
-func getDatabases(user string, password string, port int64) (databases []string, err error) {
+func getDatabases(user string, password string, port int) (databases []string, err error) {
 	query := `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME NOT IN ('information_schema','mysql','performance_schema','sys');`
-	err = queryData(user, password, port, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
+	err = functions.QueryData(user, password, port, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		db := m.GetString("SCHEMA_NAME")
 		databases = append(databases, db)
 		return nil
@@ -65,9 +43,9 @@ func getDatabases(user string, password string, port int64) (databases []string,
 	return databases, err
 }
 
-func getEngines(user string, password string, port int64, dbname string) (engines []string, err error) {
+func getEngines(user string, password string, port int, dbname string) (engines []string, err error) {
 	query := `SELECT engine FROM information_schema.tables where TABLE_SCHEMA = ? and table_type = 'BASE TABLE' GROUP BY engine;`
-	err = queryData(user, password, port, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
+	err = functions.QueryData(user, password, port, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
 		engine := m.GetString("engine")
 		engines = append(engines, engine)
 		return nil
@@ -75,9 +53,9 @@ func getEngines(user string, password string, port int64, dbname string) (engine
 	return engines, err
 }
 
-func getDatabaseSize(user string, password string, port int64, dbname string) (size int64, dataSize int64, err error) {
+func getDatabaseSize(user string, password string, port int, dbname string) (size int64, dataSize int64, err error) {
 	query := `SELECT SUM(data_length+index_length+data_free) AS "size", SUM(data_length) AS "dataSize" FROM information_schema.tables where TABLE_SCHEMA = ?;`
-	err = queryData(user, password, port, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
+	err = functions.QueryData(user, password, port, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
 		size = m.GetInt64("size")
 		dataSize = m.GetInt64("dataSize")
 		return nil
@@ -87,7 +65,7 @@ func getDatabaseSize(user string, password string, port int64, dbname string) (s
 
 // These magical multiplies for logicalSize (0.6 in case of compression, 0.8 in other cases) are just raw estimates. They can be wrong, but we will use them
 // as 'we should have at least' space check, because we can't make any accurate estimations for logical backups
-func getMySQLDatabases(user string, password string, port int64) (dbinfo map[string]*MySQLDatabase, err error) {
+func getMySQLDatabases(user string, password string, port int) (dbinfo map[string]*MySQLDatabase, err error) {
 	var logicalSize int64
 	dbinfo = make(map[string]*MySQLDatabase)
 	databases, err := getDatabases(user, password, port)
