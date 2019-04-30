@@ -171,3 +171,57 @@ func ChownRecurse(path string, uid int, gid int) error {
 		return err
 	})
 }
+
+func GetLogicalVolumeFSType(volumeName string) (string, error) {
+	command := fmt.Sprintf("blkid %s", volumeName)
+	output, err := CommandOutput(SudoCmd(command))
+	lines, err := OutputLines(output, err)
+	re := regexp.MustCompile(`TYPE="(.*?)"`)
+	for _, line := range lines {
+		fsType := re.FindStringSubmatch(line)[1]
+		return fsType, nil
+	}
+	return "", fmt.Errorf("Cannot find FS type for logical volume %s", volumeName)
+}
+
+func MountLV(mountPoint string, volumeName string) error {
+	if volumeName == "" {
+		return fmt.Errorf("Empty columeName in MountLV")
+	}
+	fsType, err := GetLogicalVolumeFSType(volumeName)
+	if err != nil {
+		return err
+	}
+
+	mountOptions := ""
+	if fsType == "xfs" {
+		mountOptions = "-o nouuid"
+	}
+	_, err = CommandOutput(SudoCmd(fmt.Sprintf("mount %s %s %s", mountOptions, volumeName, mountPoint)))
+	return err
+}
+
+func RemoveLV(volumeName string) error {
+	_, err := CommandOutput(SudoCmd(fmt.Sprintf("lvremove --force %s", volumeName)))
+	return err
+}
+
+func Unmount(mountPoint string) error {
+	_, err := CommandOutput(SudoCmd(fmt.Sprintf("umount %s", mountPoint)))
+	return err
+}
+
+func CreateSnapshot(snapshotSize string, snapshotName string, snapshotVolumeGroup string, snapshotLogicalVolume string) error {
+	_, err := CommandOutput(fmt.Sprintf("lvcreate --size %s --snapshot --name %s /dev/%s/%s", snapshotSize, snapshotName, snapshotVolumeGroup, snapshotLogicalVolume))
+	return err
+}
+
+func MySQLStop() error {
+	_, err := CommandOutput(config.Config.MySQLServiceStopCommand)
+	return err
+}
+
+func MySQLStart() error {
+	_, err := CommandOutput(config.Config.MySQLServiceStartCommand)
+	return err
+}

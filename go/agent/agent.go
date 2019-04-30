@@ -375,7 +375,7 @@ func (Agent agent) GetAgentInfo() AgentInfo {
 	if err != nil {
 		log.Errore(err)
 	}
-	agentInfo.LogicalVolumes, err = logicalVolumes("", config.Config.SnapshotVolumesFilter)
+	agentInfo.LogicalVolumes, err = logicalVolumes("", config.Config.Plugins.LVM.SnapshotName)
 	if err != nil {
 		log.Errore(err)
 	}

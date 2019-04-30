@@ -80,7 +80,19 @@ type Configuration struct {
 	CompressLogicalBackup              bool              // Compress output mydumper/mysqldump files
 	Datacenter                         string            // Datacenter, which host belongs to
 	Cluster                            string            // Cluster, which host belongs to
+	Plugins                            Plugins
 	sync.RWMutex
+}
+
+type Plugins struct {
+	LVM LVM
+}
+
+type LVM struct {
+	SnapshotSize          string // Size of the snapshot
+	SnapshotName          string // Name of the snapshot
+	SnapshotVolumeGroup   string // Volume group of the snapshot
+	SnapshotLogicalVolume string // Logical volume of the snapshot
 }
 
 // Config initialization
@@ -141,6 +153,14 @@ func newConfiguration() *Configuration {
 		CompressLogicalBackup:              true,
 		Datacenter:                         "",
 		Cluster:                            "",
+		Plugins: Plugins{
+			LVM: LVM{
+				SnapshotSize:          "",
+				SnapshotName:          "",
+				SnapshotVolumeGroup:   "",
+				SnapshotLogicalVolume: "",
+			},
+		},
 	}
 }
 

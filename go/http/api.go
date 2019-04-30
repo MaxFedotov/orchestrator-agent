@@ -31,6 +31,7 @@ import (
 
 	"github.com/github/orchestrator-agent/go/agent"
 	"github.com/github/orchestrator-agent/go/config"
+	"github.com/github/orchestrator-agent/go/functions"
 	"github.com/github/orchestrator-agent/go/osagent"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/render"
@@ -39,6 +40,11 @@ import (
 type HttpAPI struct{}
 
 var API = HttpAPI{}
+
+var hostType = map[string]bool{
+	"target": true,
+	"source": true,
+}
 
 // APIResponseCode is an OK/ERROR response code
 type APIResponseCode int
@@ -114,7 +120,7 @@ func (this *HttpAPI) ListSnapshotsLogicalVolumes(params martini.Params, r render
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := osagent.LogicalVolumes("", config.Config.SnapshotVolumesFilter)
+	output, err := osagent.LogicalVolumes("", config.Config.Plugins.LVM.SnapshotName)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -161,12 +167,12 @@ func (this *HttpAPI) MountLV(params martini.Params, r render.Render, req *http.R
 	if lv == "" {
 		lv = req.URL.Query().Get("lv")
 	}
-	output, err := osagent.MountLV(config.Config.SnapshotMountPoint, lv)
+	err := functions.MountLV(config.Config.BackupDir, lv)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	r.JSON(200, output)
+	r.JSON(200, err == nil)
 }
 
 // RemoveLV removes a logical volume
@@ -178,7 +184,7 @@ func (this *HttpAPI) RemoveLV(params martini.Params, r render.Render, req *http.
 	if lv == "" {
 		lv = req.URL.Query().Get("lv")
 	}
-	err := osagent.RemoveLV(lv)
+	err := functions.RemoveLV(lv)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -191,12 +197,12 @@ func (this *HttpAPI) Unmount(params martini.Params, r render.Render, req *http.R
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output, err := osagent.Unmount(config.Config.SnapshotMountPoint)
+	err := functions.Unmount(config.Config.BackupDir)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	r.JSON(200, output)
+	r.JSON(200, err == nil)
 }
 
 // DiskUsage returns the number of bytes of a give ndirectory (recursive)
@@ -234,7 +240,7 @@ func (this *HttpAPI) CreateSnapshot(params martini.Params, r render.Render, req 
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.CreateSnapshot()
+	err := functions.CreateSnapshot(config.Config.Plugins.LVM.SnapshotSize, config.Config.Plugins.LVM.SnapshotName+"_"+string(time.Now().Format("2006_01_02_15_04_05")), config.Config.Plugins.LVM.SnapshotVolumeGroup, config.Config.Plugins.LVM.SnapshotLogicalVolume)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -321,7 +327,7 @@ func (this *HttpAPI) MySQLStop(params martini.Params, r render.Render, req *http
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.MySQLStop()
+	err := functions.MySQLStop()
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -334,7 +340,7 @@ func (this *HttpAPI) MySQLStart(params martini.Params, r render.Render, req *htt
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.MySQLStart()
+	err := functions.MySQLStart()
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -653,6 +659,10 @@ func (this *HttpAPI) Prepare(params martini.Params, r render.Render, req *http.R
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
+	if !hostType[params["hostType"]] {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Invalid host type"})
+		return
+	}
 	err := agent.Agent.Prepare(params["seedID"], params["seedMethod"], params["hostType"])
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
@@ -664,6 +674,10 @@ func (this *HttpAPI) Prepare(params martini.Params, r render.Render, req *http.R
 // Cleanup is called after seed process
 func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	if !hostType[params["hostType"]] {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Invalid host type"})
 		return
 	}
 	err := agent.Agent.Cleanup(params["seedID"], params["seedMethod"], params["hostType"])
@@ -691,10 +705,10 @@ func (this *HttpAPI) GetMedatada(params martini.Params, r render.Render, req *ht
 func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 
 	// commands LVM
-	m.Get("/api/mountlv", this.MountLV)                // MountLV mounts a snapshot on config mount point (Backup)
-	m.Get("/api/removelv", this.RemoveLV)              // RemoveLV removes a snapshot
-	m.Get("/api/umount", this.Unmount)                 // Unmount umounts the config mount point (Cleanup)
-	m.Get("/api/create-snapshot", this.CreateSnapshot) // CreateSnapshot creates snapshot for this host
+	m.Get("/api/mountlv", this.MountLV)                // MountLV mounts a snapshot on config mount point (Backup) ++
+	m.Get("/api/removelv", this.RemoveLV)              // RemoveLV removes a snapshot ++
+	m.Get("/api/umount", this.Unmount)                 // Unmount umounts the config mount point (Cleanup) ++
+	m.Get("/api/create-snapshot", this.CreateSnapshot) // CreateSnapshot creates snapshot for this host ++
 
 	// commands MySQL
 	m.Get("/api/mysql-stop", this.MySQLStop)

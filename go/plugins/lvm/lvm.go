@@ -29,6 +29,7 @@ type config struct {
 	Plugins struct {
 		LVM struct {
 			SnapshotSize          string `json:"SnapshotSize"`
+			SnapshotName          string `json:"SnapshotName"`
 			SnapshotVolumeGroup   string `json:"SnapshotVolumeGroup"`
 			SnapshotLogicalVolume string `json:"SnapshotLogicalVolume"`
 		}
@@ -42,9 +43,10 @@ var BackupPlugin = lvm{
 }
 
 var Config *config
+var SnapshotName string
 
 const (
-	snapshotName = "orchestrator_seed"
+	snapshot     = "orchestrator_seed"
 	metadataName = "binlog_info.json"
 )
 
@@ -62,6 +64,7 @@ func init() {
 			}
 		}
 	}
+	SnapshotName = Config.Plugins.LVM.SnapshotName + "_seed"
 }
 
 func isMounted(mountPoint string) bool {
@@ -80,21 +83,6 @@ func isAvailiable(volumeGroup string) bool {
 		return false
 	}
 	return true
-}
-
-func unmount(mountPoint string) error {
-	_, err := functions.CommandOutput(functions.SudoCmd(fmt.Sprintf("umount %s", mountPoint)))
-	return err
-}
-
-func deleteSnapshot(snapshot string) error {
-	_, err := functions.CommandOutput(functions.SudoCmd(fmt.Sprintf("lvremove /dev/%s/%s", Config.Plugins.LVM.SnapshotVolumeGroup, snapshot)))
-	return err
-}
-
-func mount(mountPoint string, snapshot string) error {
-	_, err := functions.CommandOutput(functions.SudoCmd(fmt.Sprintf("mount /dev/%s/%s %s", Config.Plugins.LVM.SnapshotVolumeGroup, snapshot, mountPoint)))
-	return err
 }
 
 func saveMetadata(db *sql.DB, mysqlDatadir string) error {
@@ -117,7 +105,6 @@ func saveMetadata(db *sql.DB, mysqlDatadir string) error {
 }
 
 func createSnapshot(mysqlUser string, mysqlPassword string, mysqlPort int, mysqlDatadir string, snapshot string) error {
-	snapshotCmd := fmt.Sprintf("lvcreate --size %s --snapshot --name %s /dev/%s/%s", Config.Plugins.LVM.SnapshotSize, snapshot, Config.Plugins.LVM.SnapshotVolumeGroup, Config.Plugins.LVM.SnapshotLogicalVolume)
 	db, err := functions.OpenConnection(mysqlUser, mysqlPassword, mysqlPort)
 	if err != nil {
 		return fmt.Errorf("unable to connect to MySQL: %+v", err)
@@ -132,9 +119,9 @@ func createSnapshot(mysqlUser string, mysqlPassword string, mysqlPort int, mysql
 		err = fmt.Errorf("unable to save backup metadata: %+v", err)
 		goto Unlock
 	}
-	_, err = functions.CommandOutput(snapshotCmd)
+	err = functions.CreateSnapshot(Config.Plugins.LVM.SnapshotSize, SnapshotName, Config.Plugins.LVM.SnapshotVolumeGroup, Config.Plugins.LVM.SnapshotLogicalVolume)
 	if err != nil {
-		err = fmt.Errorf("unable to execute command %s: %+v", snapshotCmd, err)
+		err = fmt.Errorf("unable to execute create snapshot command: %+v", err)
 		goto Unlock
 	}
 Unlock:
@@ -143,23 +130,23 @@ Unlock:
 }
 
 func (l lvm) Backup(params functions.AgentParams, databases []string, errs chan error) io.Reader {
-	var snapshot = snapshotName + "_" + string(time.Now().Format("2006_01_02_15_04_05"))
+	SnapshotName = snapshot + "_" + string(time.Now().Format("2006_01_02_15_04_05"))
 	var stderr bytes.Buffer
 	var data io.Reader
 	if isMounted(params.BackupFolder) {
 		log.Warningf("LVM Backup plugin - volume already mounted on source host %s. Unmouting", params.BackupFolder)
-		err := unmount(params.BackupFolder)
+		err := functions.Unmount(params.BackupFolder)
 		if err != nil {
 			errs <- fmt.Errorf("LVM Backup plugin - unable to unmount %s: %+v", params.BackupFolder, err)
 			return data
 		}
 	}
-	err := createSnapshot(params.MysqlUser, params.MysqlPassword, params.MysqlPort, params.MysqlDatadir, snapshot)
+	err := createSnapshot(params.MysqlUser, params.MysqlPassword, params.MysqlPort, params.MysqlDatadir, SnapshotName)
 	if err != nil {
 		errs <- fmt.Errorf("LVM Backup plugin - unable to create snapshot: %+v", err)
 		return data
 	}
-	err = mount(params.BackupFolder, snapshot)
+	err = functions.MountLV(params.BackupFolder, fmt.Sprintf("/dev/%s/%s", Config.Plugins.LVM.SnapshotVolumeGroup, SnapshotName))
 	if err != nil {
 		errs <- fmt.Errorf("LVM Backup plugin - unable to mount snapshot: %+v", err)
 		return data
@@ -205,6 +192,10 @@ func (l lvm) Restore(params functions.AgentParams) error {
 	if err != nil {
 		return fmt.Errorf("LVM Backup plugin - unable to change owner to mysql:mysql for %s : %+v", params.MysqlDatadir, err)
 	}
+	err = functions.MySQLStart()
+	if err != nil {
+		return fmt.Errorf("LVM Backup plugin - unable to start MySQL: %+v", err)
+	}
 	return err
 }
 
@@ -235,11 +226,15 @@ func (l lvm) Prepare(params functions.AgentParams, hostType string) error {
 	switch hostType {
 	case "target":
 		{
-			err := functions.DeleteDirContents(params.MysqlDatadir)
+			err := functions.MySQLStop()
+			if err != nil {
+				return fmt.Errorf("LVM Backup plugin - unable to stop MySQL: %+v", err)
+			}
+			err = functions.DeleteDirContents(params.MysqlDatadir)
 			if err != nil {
 				return fmt.Errorf("LVM Backup plugin - unable to remove MySQL datadir %s: %+v", params.MysqlDatadir, err)
 			}
-			return err
+			return nil
 		}
 	case "source":
 		{
@@ -260,12 +255,11 @@ func (l lvm) Cleanup(params functions.AgentParams, hostType string) error {
 		}
 	case "source":
 		{
-			// DO WE NEED TO DELETE SNAPSHOT?
-			err := unmount(params.BackupFolder)
+			err := functions.Unmount(params.BackupFolder)
 			if err != nil {
 				return fmt.Errorf("LVM Backup plugin - unable to perform cleanup, unmount error: %+v", err)
 			}
-			err = deleteSnapshot(snapshotName)
+			err = functions.RemoveLV(fmt.Sprintf("/dev/%s/%s", Config.Plugins.LVM.SnapshotVolumeGroup, SnapshotName))
 			if err != nil {
 				return fmt.Errorf("LVM Backup plugin - unable to perform cleanup, cannot delete snapshot, error: %+v", err)
 			}

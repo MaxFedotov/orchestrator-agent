@@ -36,6 +36,7 @@
     "Plugins": {
         "LVM": {
             "SnapshotSize": "1G",
+            "SnapshotName": "orchestrator_mysql",
             "SnapshotVolumeGroup": "mysql",
             "SnapshotLogicalVolume": "datadir"
         }
