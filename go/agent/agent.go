@@ -246,7 +246,7 @@ func (Agent agent) Backup(seedID string, seedMethod string, targetHost string, d
 	errs := make(chan error, 100)
 	wg.Add(1)
 	data := Agent.BackupPlugins[seedMethod].Backup(Agent.Params, databases, errs)
-	go Agent.sendSeedData(targetHost, config.Config.SeedPort, data, &wg, errs)
+	go Agent.sendSeedData(targetHost, data, &wg, errs)
 	wg.Wait()
 	select {
 	case err := <-errs:
@@ -257,12 +257,19 @@ func (Agent agent) Backup(seedID string, seedMethod string, targetHost string, d
 	}
 }
 
-func (Agent agent) sendSeedData(targetHost string, seedPort int, data io.Reader, wg *sync.WaitGroup, errs chan error) {
-	// TO DO: add support for SSL
+func (Agent agent) sendSeedData(targetHost string, data io.Reader, wg *sync.WaitGroup, errs chan error) {
 	var stderr bytes.Buffer
-	socatTCPOpts := fmt.Sprintf("TCP:%s:%s", targetHost, strconv.Itoa(seedPort))
-
-	cmd := exec.Command("socat", "-u", "EXEC:\"zstd -\"", socatTCPOpts)
+	socatConOpts := fmt.Sprintf("TCP:%s:%s", targetHost, strconv.Itoa(config.Config.SeedPort))
+	if config.Config.UseSSL {
+		socatConOpts = fmt.Sprintf("openssl-connect:%s:%s,cert=%s", targetHost, strconv.Itoa(config.Config.SeedPort), config.Config.SSLCertFile)
+		if len(config.Config.SSLCAFile) != 0 {
+			socatConOpts += fmt.Sprintf(",cafile=%s", config.Config.SSLCAFile)
+		}
+		if config.Config.SSLSkipVerify {
+			socatConOpts += ",verify=0"
+		}
+	}
+	cmd := exec.Command("socat", "-u", "EXEC:\"zstd -\"", socatConOpts)
 	cmd.Stdin = data
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -278,8 +285,17 @@ func (Agent agent) Receive(seedID string, seedMethod string) error {
 		return log.Errorf("Unable to start recieve process, plugin %s not loaded", seedMethod)
 	}
 	var stderr bytes.Buffer
-	socatTCPOpts := fmt.Sprintf("TCP-LISTEN:%s,reuseaddr", strconv.Itoa(config.Config.SeedPort))
-	cmd := exec.Command("socat", "-u", socatTCPOpts, "EXEC:\"unzstd - -d\"")
+	socatConOpts := fmt.Sprintf("TCP-LISTEN:%s,reuseaddr", strconv.Itoa(config.Config.SeedPort))
+	if config.Config.UseSSL {
+		socatConOpts = fmt.Sprintf("openssl-listen:%s,reuseaddr,cert=%s", strconv.Itoa(config.Config.SeedPort), config.Config.SSLCertFile)
+		if len(config.Config.SSLCAFile) != 0 {
+			socatConOpts += fmt.Sprintf(",cafile=%s", config.Config.SSLCAFile)
+		}
+		if config.Config.SSLSkipVerify {
+			socatConOpts += ",verify=0"
+		}
+	}
+	cmd := exec.Command("socat", "-u", socatConOpts, "EXEC:\"unzstd - -d\"")
 	cmd.Stderr = &stderr
 	data, err := cmd.StdoutPipe()
 	if err != nil {
