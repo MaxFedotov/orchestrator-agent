@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/github/orchestrator-agent/go/functions"
+	"github.com/github/orchestrator-agent/go/helper/functions"
 )
 
 func init() {

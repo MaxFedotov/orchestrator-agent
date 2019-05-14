@@ -14,15 +14,16 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/github/orchestrator-agent/go/functions"
+	"github.com/github/orchestrator-agent/go/helper/functions"
+	"github.com/github/orchestrator-agent/go/helper/structs"
 	"github.com/openark/golib/log"
 	"github.com/openark/golib/sqlutils"
 )
 
 type lvm struct {
-	engines           []string
-	databaseSelection bool
-	availiableRestore bool
+	engines              []string
+	databaseSelection    bool
+	availiableForRestore bool
 }
 
 type config struct {
@@ -37,9 +38,9 @@ type config struct {
 }
 
 var BackupPlugin = lvm{
-	engines:           []string{"InnoDB", "MyISAM", "ROCKSDB", "TokuDB"},
-	databaseSelection: false,
-	availiableRestore: true,
+	engines:              []string{"InnoDB", "MyISAM", "ROCKSDB", "TokuDB"},
+	databaseSelection:    false,
+	availiableForRestore: true,
 }
 
 var Config *config
@@ -51,6 +52,7 @@ const (
 )
 
 func init() {
+	log.Debug("LVM Backup plugin - initializing config")
 	var configFiles = [3]string{"/etc/orchestrator-agent.conf.json", "/conf/orchestrator-agent.conf.json", "orchestrator-agent.conf.json"}
 	for _, fileName := range configFiles {
 		file, err := os.Open(fileName)
@@ -60,7 +62,7 @@ func init() {
 			if err == nil {
 				log.Infof("LVM Backup plugin - read config: %s", fileName)
 			} else {
-				log.Infof("LVM Backup plugin - cannot read config file: %s, %s", fileName, err)
+				log.Errorf("LVM Backup plugin - cannot read config file: %s, %s", fileName, err)
 			}
 		}
 	}
@@ -86,7 +88,7 @@ func isAvailiable(volumeGroup string) bool {
 }
 
 func saveMetadata(db *sql.DB, mysqlDatadir string) error {
-	metadata := functions.BackupMetadata{}
+	metadata := structs.BackupMetadata{}
 	err := sqlutils.QueryRowsMap(db, "SHOW MASTER STATUS;", func(m sqlutils.RowMap) error {
 		metadata.LogFile = m.GetString("File")
 		metadata.LogPos = m.GetInt64("Position")
@@ -129,7 +131,7 @@ Unlock:
 	return err
 }
 
-func (l lvm) Backup(params functions.AgentParams, databases []string, errs chan error) io.Reader {
+func (l lvm) Backup(params structs.AgentParams, databases []string, errs chan error) io.Reader {
 	SnapshotName = snapshot + "_" + string(time.Now().Format("2006_01_02_15_04_05"))
 	var stderr bytes.Buffer
 	var data io.Reader
@@ -153,7 +155,7 @@ func (l lvm) Backup(params functions.AgentParams, databases []string, errs chan 
 	}
 	cmd := exec.Command("tar", "cf", "-", "-C", params.BackupFolder, ".")
 	cmd.Stderr = &stderr
-	out, err := cmd.StdoutPipe()
+	data, err = cmd.StdoutPipe()
 	if err != nil {
 		errs <- fmt.Errorf("LVM Backup plugin - unable to prepare pipe for backup: %+v", err)
 		return data
@@ -168,10 +170,10 @@ func (l lvm) Backup(params functions.AgentParams, databases []string, errs chan 
 			errs <- fmt.Errorf("LVM Backup plugin - unable to backup: %+v", err)
 		}
 	}()
-	return out
+	return data
 }
 
-func (l lvm) Restore(params functions.AgentParams) error {
+func (l lvm) Restore(params structs.AgentParams) error {
 	mysqlOSuser, err := user.Lookup("mysql")
 	if err != nil {
 		return fmt.Errorf("LVM Backup plugin - unable to find uid for mysql user: %+v", err)
@@ -199,8 +201,8 @@ func (l lvm) Restore(params functions.AgentParams) error {
 	return err
 }
 
-func (l lvm) GetMetadata(params functions.AgentParams) (functions.BackupMetadata, error) {
-	backupMetadata := functions.BackupMetadata{}
+func (l lvm) GetMetadata(params structs.AgentParams) (structs.BackupMetadata, error) {
+	backupMetadata := structs.BackupMetadata{}
 	metadata, err := os.Open(filepath.Join(params.MysqlDatadir, metadataName))
 	if err != nil {
 		return backupMetadata, fmt.Errorf("LVM Backup plugin - unable to read metadata from %s: %+v", filepath.Join(params.MysqlDatadir, metadataName), err)
@@ -213,7 +215,7 @@ func (l lvm) GetMetadata(params functions.AgentParams) (functions.BackupMetadata
 	return backupMetadata, err
 }
 
-func (l lvm) Receive(params functions.AgentParams, data io.Reader) error {
+func (l lvm) Receive(params structs.AgentParams, data io.Reader) error {
 	cmd := exec.Command("tar", "-xf", "-", "-C", params.MysqlDatadir)
 	cmd.Stdin = data
 	if err := cmd.Start(); err != nil {
@@ -222,7 +224,7 @@ func (l lvm) Receive(params functions.AgentParams, data io.Reader) error {
 	return cmd.Wait()
 }
 
-func (l lvm) Prepare(params functions.AgentParams, hostType string) error {
+func (l lvm) Prepare(params structs.AgentParams, hostType string) error {
 	switch hostType {
 	case "target":
 		{
@@ -247,7 +249,7 @@ func (l lvm) Prepare(params functions.AgentParams, hostType string) error {
 	}
 }
 
-func (l lvm) Cleanup(params functions.AgentParams, hostType string) error {
+func (l lvm) Cleanup(params structs.AgentParams, hostType string) error {
 	switch hostType {
 	case "target":
 		{
@@ -289,7 +291,7 @@ func (l lvm) IsAvailiableBackup() bool {
 }
 
 func (l lvm) IsAvailiableRestore() bool {
-	return l.availiableRestore
+	return l.availiableForRestore
 }
 
 func (l lvm) SupportDatabaseSelection() bool {

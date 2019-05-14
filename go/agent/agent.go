@@ -33,13 +33,17 @@ import (
 	"time"
 
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/github/orchestrator-agent/go/functions"
+	"github.com/github/orchestrator-agent/go/helper/structs"
 	"github.com/github/orchestrator-agent/go/ssl"
 	"github.com/openark/golib/log"
 )
 
-// Agent initializes new orchestrator-agent instance
-var Agent agent
+var (
+	httpTimeout  = time.Duration(time.Duration(config.Config.HTTPTimeoutSeconds) * time.Second)
+	httpClient   = &http.Client{}
+	LastTalkback time.Time
+	Agent        agent
+)
 
 // Agent represents basic agent data and methods
 type agent struct {
@@ -49,7 +53,7 @@ type agent struct {
 	Datacenter    string
 	Cluster       string
 	BackupPlugins map[string]BackupPlugin
-	Params        functions.AgentParams
+	Params        structs.AgentParams
 }
 
 // AgentInfo presents the data of an agent
@@ -108,23 +112,17 @@ type SeedMethod struct {
 
 // BackupPlugin is an interface describing backup plugin fuctions
 type BackupPlugin interface {
-	Prepare(params functions.AgentParams, hostType string) error
-	Backup(params functions.AgentParams, databases []string, errs chan error) io.Reader
-	Receive(params functions.AgentParams, data io.Reader) error
-	Restore(params functions.AgentParams) error
-	GetMetadata(params functions.AgentParams) (functions.BackupMetadata, error)
-	Cleanup(params functions.AgentParams, hostType string) error
+	Prepare(params structs.AgentParams, hostType string) error
+	Backup(params structs.AgentParams, databases []string, errs chan error) io.Reader
+	Receive(params structs.AgentParams, data io.Reader) error
+	Restore(params structs.AgentParams) error
+	GetMetadata(params structs.AgentParams) (structs.BackupMetadata, error)
+	Cleanup(params structs.AgentParams, hostType string) error
 	SupportedEngines() []string
 	IsAvailiableBackup() bool
 	IsAvailiableRestore() bool
 	SupportDatabaseSelection() bool
 }
-
-var (
-	httpTimeout  = time.Duration(time.Duration(config.Config.HTTPTimeoutSeconds) * time.Second)
-	httpClient   = &http.Client{}
-	LastTalkback time.Time
-)
 
 func dialTimeout(network, addr string) (net.Conn, error) {
 	return net.DialTimeout(network, addr, httpTimeout)
@@ -201,34 +199,35 @@ func InitializeAgent() {
 
 func (Agent agent) Cleanup(seedID string, seedMethod string, hostType string) error {
 	if ok := Agent.isPluginLoaded(seedMethod); !ok {
-		return fmt.Errorf("Unable to start cleanup process, plugin %s not loaded", seedMethod)
+		return log.Errorf("Unable to start cleanup process, plugin %s not loaded", seedMethod)
 	}
-	return Agent.BackupPlugins[seedMethod].Cleanup(Agent.Params, hostType)
+	return log.Errore(Agent.BackupPlugins[seedMethod].Cleanup(Agent.Params, hostType))
 }
 
-func (Agent agent) GetMetadata(seedID string, seedMethod string) (metadata functions.BackupMetadata, err error) {
-	metadata = functions.BackupMetadata{}
+func (Agent agent) GetMetadata(seedID string, seedMethod string) (metadata structs.BackupMetadata, err error) {
+	metadata = structs.BackupMetadata{}
 	if ok := Agent.isPluginLoaded(seedMethod); !ok {
-		return metadata, fmt.Errorf("Unable to get metadata, plugin %s not loaded", seedMethod)
+		return metadata, log.Errorf("Unable to get metadata, plugin %s not loaded", seedMethod)
 	}
 	metadata, err = Agent.BackupPlugins[seedMethod].GetMetadata(Agent.Params)
 	metadata.MasterUser = config.Config.MySQLReplicationUser
 	metadata.MasterPassword = config.Config.MySQLReplicationPassword
-	return metadata, err
+	return metadata, log.Errore(err)
 }
 
 func (Agent agent) Prepare(seedID string, seedMethod string, hostType string) error {
 	if ok := Agent.isPluginLoaded(seedMethod); !ok {
-		return fmt.Errorf("Unable to start prepare process, plugin %s not loaded", seedMethod)
+		return log.Errorf("Unable to start prepare process, plugin %s not loaded", seedMethod)
 	}
-	return Agent.BackupPlugins[seedMethod].Prepare(Agent.Params, hostType)
+	err := Agent.BackupPlugins[seedMethod].Prepare(Agent.Params, hostType)
+	return log.Errore(err)
 }
 
 func (Agent agent) Restore(seedID string, seedMethod string) error {
 	if ok := Agent.isPluginLoaded(seedMethod); !ok {
-		return fmt.Errorf("Unable to start restore process, plugin %s not loaded", seedMethod)
+		return log.Errorf("Unable to start restore process, plugin %s not loaded", seedMethod)
 	}
-	return Agent.BackupPlugins[seedMethod].Restore(Agent.Params)
+	return log.Errore(Agent.BackupPlugins[seedMethod].Restore(Agent.Params))
 }
 
 func (Agent agent) isPluginLoaded(seedMethod string) bool {
@@ -240,7 +239,7 @@ func (Agent agent) isPluginLoaded(seedMethod string) bool {
 
 func (Agent agent) Backup(seedID string, seedMethod string, targetHost string, databases []string) error {
 	if ok := Agent.isPluginLoaded(seedMethod); !ok {
-		return fmt.Errorf("Unable to start backup process, plugin %s not loaded", seedMethod)
+		return log.Errorf("Unable to start backup process, plugin %s not loaded", seedMethod)
 	}
 	var wg sync.WaitGroup
 	errs := make(chan error, 100)
@@ -250,8 +249,7 @@ func (Agent agent) Backup(seedID string, seedMethod string, targetHost string, d
 	wg.Wait()
 	select {
 	case err := <-errs:
-		log.Errore(err)
-		return err
+		return log.Errore(err)
 	default:
 		return nil
 	}
@@ -361,12 +359,12 @@ func initilizePlugins(pluginDir string) map[string]BackupPlugin {
 		}
 		loadedPlugin, err := plug.Lookup("BackupPlugin")
 		if err != nil {
-			log.Errorf("Error loading plugin %s from %s: %s", filepath.Base(file), pluginDir, err)
+			log.Errorf("Error loading plugin %s from %s: %+v", filepath.Base(file), pluginDir, err)
 			continue
 		}
 		newBackupPlugin, ok := loadedPlugin.(BackupPlugin)
 		if !ok {
-			log.Errorf("Error loading plugin %s from %s", filepath.Base(file), pluginDir)
+			log.Errorf("Error loading plugin %s from %s", pluginName, filepath.Join(pluginDir, filepath.Base(file)))
 			continue
 		}
 		plugins[pluginName] = newBackupPlugin

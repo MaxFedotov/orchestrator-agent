@@ -20,7 +20,7 @@ import (
 	"fmt"
 
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/github/orchestrator-agent/go/functions"
+	"github.com/github/orchestrator-agent/go/helper/functions"
 	"github.com/openark/golib/sqlutils"
 )
 

@@ -44,7 +44,7 @@ func acceptSignal() {
 func main() {
 	configFile := flag.String("config", "", "config file name")
 	verbose := flag.Bool("verbose", true, "verbose")
-	debug := flag.Bool("debug", false, "debug mode (very verbose)")
+	debug := flag.Bool("debug", true, "debug mode (very verbose)")
 	stack := flag.Bool("stack", false, "add stack trace upon error")
 	flag.Parse()
 
@@ -62,8 +62,7 @@ func main() {
 	if AppVersion == "" {
 		AppVersion = "local-build"
 	}
-
-	log.Info("starting orchestrator-agent %s", AppVersion)
+	log.Infof("Starting orchestrator-agent %s", AppVersion)
 
 	if len(*configFile) > 0 {
 		config.ForceRead(*configFile)
