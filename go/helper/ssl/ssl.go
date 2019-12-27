@@ -8,7 +8,6 @@ import (
 	nethttp "net/http"
 	"strings"
 
-	"github.com/github/orchestrator-agent/go/config"
 	"github.com/go-martini/martini"
 	"github.com/outbrain/golib/log"
 )
@@ -68,8 +67,8 @@ func NewTLSConfig(caFile string, mutualTLS bool) (*tls.Config, error) {
 
 // Verify that the OU of the presented client certificate matches the list
 // of Valid OUs
-func Verify(r *nethttp.Request, validOUs []string) error {
-	if strings.Contains(r.URL.String(), config.Config.StatusEndpoint) && !config.Config.StatusOUVerify {
+func Verify(r *nethttp.Request, validOUs []string, StatusEndpoint string, StatusOUVerify bool) error {
+	if strings.Contains(r.URL.String(), StatusEndpoint) && !StatusOUVerify {
 		return nil
 	}
 	if r.TLS == nil {
@@ -91,10 +90,10 @@ func Verify(r *nethttp.Request, validOUs []string) error {
 }
 
 // TODO: make this testable?
-func VerifyOUs(validOUs []string) martini.Handler {
+func VerifyOUs(validOUs []string, StatusEndpoint string, StatusOUVerify bool) martini.Handler {
 	return func(res nethttp.ResponseWriter, req *nethttp.Request, c martini.Context) {
 		log.Debug("Verifying client OU")
-		if err := Verify(req, validOUs); err != nil {
+		if err := Verify(req, validOUs, StatusEndpoint, StatusOUVerify); err != nil {
 			nethttp.Error(res, err.Error(), nethttp.StatusUnauthorized)
 		}
 	}

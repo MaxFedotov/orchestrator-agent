@@ -3,3 +3,5 @@
 .gopath/
 .idea/
 *.log
+.vscode/
+*DS_store

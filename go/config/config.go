@@ -116,7 +116,7 @@ func read(file_name string) (*Configuration, error) {
 		decoder := json.NewDecoder(file)
 		err := decoder.Decode(Config)
 		if err == nil {
-			log.Infof("Read config: %s", file_name)
+			//log.Infof("Read config: %s", file_name)
 		} else {
 			log.Fatal("Cannot read config file:", file_name, err)
 		}

@@ -18,15 +18,15 @@ package main
 
 import (
 	"flag"
-	"io/ioutil"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/github/orchestrator-agent/go/agent"
-	"github.com/github/orchestrator-agent/go/app"
 	"github.com/github/orchestrator-agent/go/config"
-	"github.com/outbrain/golib/log"
+	log "github.com/sirupsen/logrus"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
 var AppVersion string
@@ -40,49 +40,53 @@ func acceptSignal() {
 	log.Fatalf("Got signal: %+v", sig)
 }
 
-// main is the application's entry point. It will either spawn a CLI or HTTP itnerfaces.
-func main() {
-	configFile := flag.String("config", "", "config file name")
-	verbose := flag.Bool("verbose", false, "verbose")
-	debug := flag.Bool("debug", false, "debug mode (very verbose)")
-	stack := flag.Bool("stack", false, "add stack trace upon error")
-	flag.Parse()
+func init() {
+	//log.SetFormatter(&prefixed.TextFormatter{FullTimestamp: true})
+	log.SetFormatter(&prefixed.TextFormatter{FullTimestamp: true, ForceFormatting: true})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(log.InfoLevel)
+}
 
-	log.SetLevel(log.ERROR)
-	if *verbose {
-		log.SetLevel(log.INFO)
-	}
-	if *debug {
-		log.SetLevel(log.DEBUG)
-	}
-	if *stack {
-		log.SetPrintStackTrace(*stack)
-	}
+// main is the application's entry point. It will either spawn a CLI or HTTP interfaces.
+func main() {
+	configFile := flag.String("config", "/etc/orchestrator-agent.conf", "config file name")
+	printVersion := flag.Bool("version", false, "Print version")
+	flag.Parse()
 
 	if AppVersion == "" {
 		AppVersion = "local-build"
 	}
 
-	log.Info("starting orchestrator-agent %s", AppVersion)
+	if *printVersion {
+		fmt.Print(AppVersion)
+		return
+	}
+
+	defaultLogger := log.WithFields(log.Fields{"prefix": "agent"})
+
+	app := agent.New(*configFile, defaultLogger)
+
+	if err := app.LoadConfig(); err != nil {
+		defaultLogger.WithField("config", *configFile).Fatal(err)
+	}
+
+	defaultLogger.WithField("version", AppVersion).Info("Starting orchestrator-agent")
+
+	if err := app.Start(); err != nil {
+		defaultLogger.WithField("error", err).Fatal("Unable to initialize orchestrator-agent")
+	}
 
 	if len(*configFile) > 0 {
-		config.ForceRead(*configFile)
+		config.ForceRead("/etc/orchestrator-agent.conf.json")
 	} else {
 		config.Read("/etc/orchestrator-agent.conf.json", "conf/orchestrator-agent.conf.json", "orchestrator-agent.conf.json")
 	}
 
-	if len(config.Config.AgentsServer) == 0 {
-		log.Fatal("AgentsServer unconfigured. Please set to the HTTP address orchestrator serves agents (port is by default 3001)")
-	}
+	defaultLogger.WithField("token", app.Params.Token).Info("Process token generated")
 
-	log.Debugf("Process token: %s", agent.ProcessToken.Hash)
-	if config.Config.TokenHintFile != "" {
-		log.Debugf("Writing token to TokenHintFile: %s", config.Config.TokenHintFile)
-		err := ioutil.WriteFile(config.Config.TokenHintFile, []byte(agent.ProcessToken.Hash), 0644)
-		log.Errore(err)
-	}
+	acceptSignal()
 
-	go acceptSignal()
-
-	app.Http()
+	//TODO
+	// gracefull shutdown
+	// beautify logger, format should be 2019-12-27T20:10:33+03:00 [INFO] [Agent] message var1=value var2=value
 }
