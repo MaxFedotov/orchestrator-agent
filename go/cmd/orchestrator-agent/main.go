@@ -23,10 +23,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	prefixed "github.com/MaxFedotov/logrus-prefixed-formatter"
 	"github.com/github/orchestrator-agent/go/agent"
 	"github.com/github/orchestrator-agent/go/config"
 	log "github.com/sirupsen/logrus"
-	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
 var AppVersion string
@@ -88,5 +88,4 @@ func main() {
 
 	//TODO
 	// gracefull shutdown
-	// beautify logger, format should be 2019-12-27T20:10:33+03:00 [INFO] [Agent] message var1=value var2=value
 }

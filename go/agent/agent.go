@@ -37,12 +37,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-//func init() {
-//	log.SetFormatter(&prefixed.TextFormatter{FullTimestamp: true})
-//	log.SetOutput(os.Stdout)
-//	log.SetLevel(log.InfoLevel)
-//}
-
 type Agent struct {
 	Params         *AgentParams
 	Info           *AgentInfo
@@ -283,8 +277,7 @@ func (agent *Agent) SubmitAgent() {
 }
 
 // PingServer checks connectivity back to the orchestrator server
-func (agent *Agent) PingServer() error {
-	url := fmt.Sprintf("%s:%d/api/agent-ping", agent.Config.Orchestrator.URL, agent.Config.Orchestrator.AgentsPort)
+func (agent *Agent) PingServer(url string) error {
 	response, err := agent.HTTPClient.Get(url)
 	if err != nil {
 		return err
@@ -299,12 +292,13 @@ func (agent *Agent) ContinuousOperation() {
 	agent.Logger.Info("Starting continuous submit operation")
 	tick := time.Tick(agent.Config.Common.PollInterval.Value())
 	resubmitTick := time.Tick(agent.Config.Common.ResubmitAgentInterval.Value())
+	url := fmt.Sprintf("%s:%d/api/agent-ping", agent.Config.Orchestrator.URL, agent.Config.Orchestrator.AgentsPort)
 
 	agent.SubmitAgent()
 	for range tick {
 		// Do stuff
-		if err := agent.PingServer(); err != nil {
-			agent.Logger.Warn("Failed to ping orchestrator server")
+		if err := agent.PingServer(url); err != nil {
+			agent.Logger.WithField("url", url).Warn("Failed to ping orchestrator server")
 		} else {
 			agent.LastTalkback = time.Now()
 		}
