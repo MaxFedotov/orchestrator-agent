@@ -47,6 +47,23 @@ type LogicalVolume struct {
 	SnapshotPercent float64
 }
 
+// Mount describes a file system mount point
+type Mount struct {
+	Path           string
+	Device         string
+	LVPath         string
+	FileSystem     string
+	IsMounted      bool
+	DiskUsage      int64
+	MySQLDataPath  string
+	MySQLDiskUsage int64
+}
+
+func init() {
+	osPath := os.Getenv("PATH")
+	os.Setenv("PATH", fmt.Sprintf("%s:/usr/sbin:/usr/bin:/sbin:/bin", osPath))
+}
+
 func GetMySQLDataDir() (string, error) {
 	command := config.Config.MySQLDatadirCommand
 	output, err := commandOutput(command)
@@ -240,23 +257,6 @@ func (this *LogicalVolume) IsSnapshotValid() bool {
 		return false
 	}
 	return true
-}
-
-// Mount describes a file system mount point
-type Mount struct {
-	Path           string
-	Device         string
-	LVPath         string
-	FileSystem     string
-	IsMounted      bool
-	DiskUsage      int64
-	MySQLDataPath  string
-	MySQLDiskUsage int64
-}
-
-func init() {
-	osPath := os.Getenv("PATH")
-	os.Setenv("PATH", fmt.Sprintf("%s:/usr/sbin:/usr/bin:/sbin:/bin", osPath))
 }
 
 func commandSplit(commandText string) (string, []string) {

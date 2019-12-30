@@ -44,6 +44,8 @@ type loggingConfig struct {
 
 type mysqlConfig struct {
 	Port                int    `toml:"port"`
+	Datadir             string `toml:"datadir"`
+	LogFile             string `toml:"datadir"`
 	SeedUser            string `toml:"seed-user"`
 	SeedPassword        string `toml:"seed-password"`
 	ReplicationUser     string `toml:"replication-user"`
@@ -136,6 +138,8 @@ func NewConfig() *Config {
 		},
 		Mysql: mysqlConfig{
 			Port:                3306,
+			Datadir:             "/var/lib/mysql",
+			LogFile:             "/var/log/mysql/mysqld.log",
 			SeedUser:            "",
 			SeedPassword:        "",
 			ReplicationUser:     "",
