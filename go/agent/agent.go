@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/github/orchestrator-agent/go/dbagent"
 	"github.com/github/orchestrator-agent/go/helper/http"
 	"github.com/github/orchestrator-agent/go/helper/ssl"
 	"github.com/github/orchestrator-agent/go/helper/token"
@@ -44,6 +45,7 @@ type Agent struct {
 	SeedMethods    map[string]*seed.SeedMethod
 	ConfigFileName string
 	HTTPClient     *nethttp.Client
+	MySQLClient    *dbagent.MySQLClient
 	LastTalkback   time.Time
 	Logger         *log.Entry
 	sync.RWMutex
@@ -67,9 +69,9 @@ type AgentInfo struct {
 	MySQLDatadirDiskFree    int64
 	BackupDir               string
 	BackupDirDiskFree       int64
-	MySQLInnoDBLogSize      int64
+	MySQLInnoDBLogSize      int64 // do we need it?
 	MySQLErrorLogTail       []string
-	MySQLDatabases          map[string]*MySQLDatabase
+	MySQLDatabases          map[string]*dbagent.MySQLDatabase
 }
 
 // LogicalVolume describes an LVM volume
@@ -90,13 +92,6 @@ type Mount struct {
 	FileSystem string
 	IsMounted  bool
 	DiskUsage  int64
-}
-
-// MySQLDatabase desctibes a MySQL database
-type MySQLDatabase struct {
-	Engines      []string
-	PhysicalSize int64
-	LogicalSize  int64
 }
 
 // New creates new instance of orchestrator-agent
@@ -200,7 +195,7 @@ func (agent *Agent) parseConfig() error {
 func (agent *Agent) Start() error {
 	hostname, err := os.Hostname()
 	if err != nil {
-		return fmt.Errorf("Unable to get hostname")
+		return fmt.Errorf("Unable to get hostname: %+v", err)
 	}
 	agent.Params = &AgentParams{
 		Hostname: hostname,
@@ -208,6 +203,11 @@ func (agent *Agent) Start() error {
 		Token:    token.ProcessToken.Hash,
 	}
 	agent.HTTPClient = http.InitHTTPClient(agent.Config.Common.HTTPTimeout, agent.Config.Common.SSLSkipVerify, agent.Config.Common.SSLCAFile, agent.Config.Common.UseMutualTLS, agent.Config.Common.SSLCertFile, agent.Config.Common.SSLPrivateKeyFile, agent.Logger)
+
+	agent.MySQLClient, err = dbagent.NewMySQLClient(agent.Config.Mysql.SeedUser, agent.Config.Mysql.SeedPassword, agent.Config.Mysql.Port)
+	if err != nil {
+		return fmt.Errorf("Unable to connect to MySQL: %+v", err)
+	}
 	// here goes each of seedmethods initializations
 
 	go agent.ContinuousOperation()

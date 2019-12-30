@@ -40,6 +40,7 @@ func buildTLS(sslSkipVerify bool, sslCAFile string, useMutualTLS bool, sslCertFi
 	return tlsConfig, nil
 }
 
+// NewMartini creates new instance of martini with configured logger
 func NewMartini() *martini.ClassicMartini {
 	martini.Env = martini.Prod
 	apiLogger := log.WithFields(log.Fields{"prefix": "API"})
