@@ -46,7 +46,7 @@ func NewMySQLClient(user string, password string, port int) (*MySQLClient, error
 	return mysqlClient, nil
 }
 
-func (m *MySQLClient) getDatabases(user string, password string, port int) (databases []string, err error) {
+func (m *MySQLClient) getDatabases() (databases []string, err error) {
 	query := `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME NOT IN ('information_schema','mysql','performance_schema','sys');`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		db := m.GetString("SCHEMA_NAME")
@@ -56,7 +56,7 @@ func (m *MySQLClient) getDatabases(user string, password string, port int) (data
 	return databases, err
 }
 
-func (m *MySQLClient) getEngines(user string, password string, port int, dbname string) (engines []string, err error) {
+func (m *MySQLClient) getEngines(dbname string) (engines []string, err error) {
 	query := `SELECT engine FROM information_schema.tables where TABLE_SCHEMA = ? and table_type = 'BASE TABLE' GROUP BY engine;`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
 		engine := m.GetString("engine")
@@ -66,7 +66,7 @@ func (m *MySQLClient) getEngines(user string, password string, port int, dbname 
 	return engines, err
 }
 
-func (m *MySQLClient) getDatabaseSize(user string, password string, port int, dbname string) (size int64, err error) {
+func (m *MySQLClient) getDatabaseSize(dbname string) (size int64, err error) {
 	query := `SELECT SUM(data_length+index_length+data_free) AS "size" FROM information_schema.tables where TABLE_SCHEMA = ?;`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
 		size = m.GetInt64("size")
@@ -76,18 +76,18 @@ func (m *MySQLClient) getDatabaseSize(user string, password string, port int, db
 }
 
 // GetMySQLDatabases return information about MySQL databases, size and engines
-func (m *MySQLClient) GetMySQLDatabases(user string, password string, port int) (dbinfo map[string]*MySQLDatabase, err error) {
+func (m *MySQLClient) GetMySQLDatabases() (dbinfo map[string]*MySQLDatabase, err error) {
 	dbinfo = make(map[string]*MySQLDatabase)
-	databases, err := m.getDatabases(user, password, port)
+	databases, err := m.getDatabases()
 	if err != nil {
 		return dbinfo, fmt.Errorf("Unable to get databases info: %+v", err)
 	}
 	for _, db := range databases {
-		engines, err := m.getEngines(user, password, port, db)
+		engines, err := m.getEngines(db)
 		if err != nil {
 			return dbinfo, fmt.Errorf("Unable to get enigines info: %+v", err)
 		}
-		size, err := m.getDatabaseSize(user, password, port, db)
+		size, err := m.getDatabaseSize(db)
 		if err != nil {
 			return dbinfo, fmt.Errorf("Unable to get databases size info: %+v", err)
 		}
