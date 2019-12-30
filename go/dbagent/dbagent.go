@@ -17,9 +17,8 @@
 package dbagent
 
 import (
-	"fmt"
-
 	"database/sql"
+	"fmt"
 
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/openark/golib/sqlutils"
@@ -36,7 +35,7 @@ type MySQLClient struct {
 	Conn *sql.DB
 }
 
-// NewMySQL initialize new MySQL Client
+// NewMySQLClient initialize new MySQL Client
 func NewMySQLClient(user string, password string, port int) (*MySQLClient, error) {
 	mysqlClient := &MySQLClient{}
 	conn, err := mysql.OpenConnection(user, password, port)
