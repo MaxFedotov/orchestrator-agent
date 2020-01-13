@@ -58,15 +58,15 @@ func GetSnapshotHosts(snapshotHostsCmd string, execWithSudo bool) ([]string, err
 	return hosts, nil
 }
 
-func GetLogicalVolumes(volumeName string, filterPattern string, execWithSudo bool) ([]LogicalVolume, error) {
+func GetLogicalVolumes(volumeName string, filterPattern string, execWithSudo bool) ([]*LogicalVolume, error) {
 	output, err := cmd.CommandOutput(fmt.Sprintf("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent %s", volumeName), execWithSudo)
 	if err != nil {
 		return nil, err
 	}
 	tokens := cmd.OutputTokens(`[ \t]+`, output)
-	logicalVolumes := []LogicalVolume{}
+	logicalVolumes := []*LogicalVolume{}
 	for _, lineTokens := range tokens {
-		logicalVolume := LogicalVolume{
+		logicalVolume := &LogicalVolume{
 			Name:      lineTokens[1],
 			GroupName: lineTokens[2],
 			Path:      lineTokens[3],
@@ -80,8 +80,8 @@ func GetLogicalVolumes(volumeName string, filterPattern string, execWithSudo boo
 	return logicalVolumes, nil
 }
 
-func GetMount(mountPoint string, execWithSudo bool) (Mount, error) {
-	mount := Mount{
+func GetMount(mountPoint string, execWithSudo bool) (*Mount, error) {
+	mount := &Mount{
 		Path:      mountPoint,
 		IsMounted: false,
 	}
@@ -103,8 +103,8 @@ func GetMount(mountPoint string, execWithSudo bool) (Mount, error) {
 	return mount, nil
 }
 
-func MountLV(mountPoint string, volumeName string, execWithSudo bool) (Mount, error) {
-	mount := Mount{
+func MountLV(mountPoint string, volumeName string, execWithSudo bool) (*Mount, error) {
+	mount := &Mount{
 		Path:      mountPoint,
 		IsMounted: false,
 	}
@@ -128,8 +128,8 @@ func MountLV(mountPoint string, volumeName string, execWithSudo bool) (Mount, er
 	return GetMount(mountPoint, execWithSudo)
 }
 
-func Unmount(mountPoint string, execWithSudo bool) (Mount, error) {
-	mount := Mount{
+func Unmount(mountPoint string, execWithSudo bool) (*Mount, error) {
+	mount := &Mount{
 		Path:      mountPoint,
 		IsMounted: false,
 	}

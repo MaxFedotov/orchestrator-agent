@@ -59,10 +59,10 @@ type AgentParams struct {
 }
 
 type AgentInfo struct {
-	LocalSnapshotsHosts  []string                // AvailableLocalSnapshots in Orchestrator
-	SnaphostHosts        []string                // AvailableSnapshots in Orchestrator
-	LogicalVolumes       []osagent.LogicalVolume // pass by reference ??
-	MountPoint           osagent.Mount           // pass by reference ??
+	LocalSnapshotsHosts  []string                 // AvailableLocalSnapshots in Orchestrator
+	SnaphostHosts        []string                 // AvailableSnapshots in Orchestrator
+	LogicalVolumes       []*osagent.LogicalVolume // pass by reference ??
+	MountPoint           *osagent.Mount           // pass by reference ??
 	BackupDir            string
 	BackupDirDiskFree    int64
 	MySQLRunning         bool
