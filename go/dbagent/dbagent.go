@@ -19,6 +19,7 @@ package dbagent
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/openark/golib/sqlutils"
@@ -94,4 +95,36 @@ func (m *MySQLClient) GetMySQLDatabases() (dbinfo map[string]*MySQLDatabase, err
 		dbinfo[db] = &MySQLDatabase{engines, size}
 	}
 	return dbinfo, err
+}
+
+// GetMySQLDatadir returns path to MySQL data directory
+func (m *MySQLClient) GetMySQLDatadir() (datadir string, err error) {
+	query := `SHOW VARIABLES LIKE 'datadir'`
+	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
+		datadir = m.GetString("Value")
+		return nil
+	})
+	return datadir, err
+}
+
+// GetMySQLLogFile returns path to MySQL log file
+func (m *MySQLClient) GetMySQLLogFile() (logFile string, err error) {
+	query := `SHOW VARIABLES LIKE 'log_error'`
+	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
+		logFile = m.GetString("Value")
+		return nil
+	})
+	return logFile, err
+}
+
+// GetMySQLVersion return version of installed MySQL
+func (m *MySQLClient) GetMySQLVersion() (version string, err error) {
+	query := `SELECT @@version AS version`
+	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
+		version = m.GetString("version")
+		return nil
+	})
+	re := regexp.MustCompile(`(\d+)\.(\d+)`)
+	majorVersion := re.FindStringSubmatch(version)[0]
+	return majorVersion, err
 }

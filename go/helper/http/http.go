@@ -56,7 +56,7 @@ func NewMartini() *martini.ClassicMartini {
 }
 
 func martiniLogger() martini.Handler {
-	return func(res http.ResponseWriter, req *http.Request, c martini.Context, entry *log.Entry) {
+	return func(res http.ResponseWriter, req *http.Request, c martini.Context, logger *log.Entry) {
 		start := time.Now()
 
 		addr := req.Header.Get("X-Real-IP")
@@ -67,12 +67,12 @@ func martiniLogger() martini.Handler {
 			}
 		}
 
-		entry.WithFields(log.Fields{"method": req.Method, "URL": req.URL.Path, "address": addr}).Debug("Processing request")
+		logger.WithFields(log.Fields{"method": req.Method, "URL": req.URL.Path, "address": addr}).Debug("Processing request")
 
 		rw := res.(martini.ResponseWriter)
 		c.Next()
 
-		entry.WithFields(log.Fields{"URL": req.URL.Path, "status": rw.Status(), "statusText": http.StatusText(rw.Status()), "time": time.Since(start)}).Debug("Request completed")
+		logger.WithFields(log.Fields{"URL": req.URL.Path, "status": rw.Status(), "statusText": http.StatusText(rw.Status()), "time": time.Since(start)}).Debug("Request completed")
 
 	}
 }

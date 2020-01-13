@@ -30,6 +30,7 @@ import (
 	"github.com/github/orchestrator-agent/go/helper/http"
 	"github.com/github/orchestrator-agent/go/helper/ssl"
 	"github.com/github/orchestrator-agent/go/helper/token"
+	"github.com/github/orchestrator-agent/go/osagent"
 	"github.com/github/orchestrator-agent/go/seed"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/auth"
@@ -58,40 +59,20 @@ type AgentParams struct {
 }
 
 type AgentInfo struct {
-	AvailableLocalSnapshots []string
-	AvailableSnapshots      []string
-	LogicalVolumes          []LogicalVolume
-	MountPoint              Mount
-	MySQLRunning            bool
-	MySQLPort               int
-	MySQLDatadir            string
-	MySQLDatadirSize        int64
-	MySQLDatadirDiskFree    int64
-	BackupDir               string
-	BackupDirDiskFree       int64
-	MySQLInnoDBLogSize      int64 // do we need it?
-	MySQLErrorLogTail       []string
-	MySQLDatabases          map[string]*dbagent.MySQLDatabase
-}
-
-// LogicalVolume describes an LVM volume
-type LogicalVolume struct {
-	Name            string
-	GroupName       string
-	Path            string
-	IsSnapshot      bool
-	SnapshotPercent float64
-	SnapshotDate    time.Time
-}
-
-// Mount describes a file system mount point
-type Mount struct {
-	Path       string
-	Device     string
-	LVPath     string
-	FileSystem string
-	IsMounted  bool
-	DiskUsage  int64
+	LocalSnapshotsHosts  []string                // AvailableLocalSnapshots in Orchestrator
+	SnaphostHosts        []string                // AvailableSnapshots in Orchestrator
+	LogicalVolumes       []osagent.LogicalVolume // pass by reference ??
+	MountPoint           osagent.Mount           // pass by reference ??
+	BackupDir            string
+	BackupDirDiskFree    int64
+	MySQLRunning         bool
+	MySQLPort            int
+	MySQLDatadir         string
+	MySQLDatadirDiskUsed int64
+	MySQLDatadirDiskFree int64
+	MySQLVersion         string
+	MySQLDatabases       map[string]*dbagent.MySQLDatabase
+	MySQLErrorLogTail    []string
 }
 
 // New creates new instance of orchestrator-agent
@@ -310,4 +291,69 @@ func (agent *Agent) ContinuousOperation() {
 		default:
 		}
 	}
+}
+
+// GetAgentInfo return system and MySQL information of the agent host
+func (agent *Agent) GetAgentInfo() *AgentInfo {
+	agent.Lock()
+	defer agent.Unlock()
+
+	var err error
+	agent.Info = &AgentInfo{}
+	agent.Info.LocalSnapshotsHosts, err = osagent.GetSnapshotHosts(agent.Config.LVM.AvailableLocalSnapshotHostsCommand, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get local snapshot hosts")
+	}
+	agent.Info.SnaphostHosts, err = osagent.GetSnapshotHosts(agent.Config.LVM.AvailableSnapshotHostsCommand, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get snapshot hosts")
+	}
+	agent.Info.LogicalVolumes, err = osagent.GetLogicalVolumes("", agent.Config.LVM.SnapshotVolumesFilter, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get logical volumes info")
+	}
+	agent.Info.MountPoint, err = osagent.GetMount(agent.Config.LVM.SnapshotMountPoint, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get snapshot mount point info")
+	}
+	agent.Info.BackupDir = agent.Config.Common.BackupDir
+	agent.Info.BackupDirDiskFree, err = osagent.GetFSStatistics(agent.Config.Common.BackupDir, osagent.Free)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get backup directory free space info")
+	}
+	agent.Info.MySQLRunning, err = osagent.MySQLRunning(agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get information about MySQL status (running/stopped)")
+	}
+	agent.Info.MySQLPort = agent.Config.Mysql.Port
+	agent.Info.MySQLDatadir, err = agent.MySQLClient.GetMySQLDatadir()
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir path")
+	}
+	agent.Info.MySQLDatadirDiskUsed, err = osagent.GetDiskUsage(agent.Info.MySQLDatadir, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir used space info")
+	}
+	agent.Info.MySQLDatadirDiskFree, err = osagent.GetFSStatistics(agent.Info.MySQLDatadir, osagent.Free)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir free space info")
+	}
+	agent.Info.MySQLVersion, err = agent.MySQLClient.GetMySQLVersion()
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL version info")
+	}
+	agent.Info.MySQLDatabases, err = agent.MySQLClient.GetMySQLDatabases()
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL databases info")
+	}
+	mySQLLogFile, err := agent.MySQLClient.GetMySQLLogFile()
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL log file info")
+	} else {
+		agent.Info.MySQLErrorLogTail, err = osagent.GetMySQLErrorLogTail(mySQLLogFile, agent.Config.Common.ExecWithSudo)
+		if err != nil {
+			agent.Logger.WithField("error", err).Error("Unable to read MySQL log file")
+		}
+	}
+	return agent.Info
 }

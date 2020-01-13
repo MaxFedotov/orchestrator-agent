@@ -44,7 +44,6 @@ type loggingConfig struct {
 
 type mysqlConfig struct {
 	Port                int    `toml:"port"`
-	Datadir             string `toml:"datadir"`
 	LogFile             string `toml:"datadir"`
 	SeedUser            string `toml:"seed-user"`
 	SeedPassword        string `toml:"seed-password"`
@@ -76,6 +75,7 @@ type lvmConfig struct {
 	AvailableLocalSnapshotHostsCommand string `toml:"available-local-snapshot-hosts-command"`
 	AvailableSnapshotHostsCommand      string `toml:"available-snapshot-hosts-command"`
 	SnapshotVolumesFilter              string `toml:"snapshot-volumes-filter"`
+	SnapshotMountPoint                 string `toml:"snapshot-mount-point"`
 }
 
 type clonePluginConfig struct {
@@ -138,7 +138,6 @@ func NewConfig() *Config {
 		},
 		Mysql: mysqlConfig{
 			Port:                3306,
-			Datadir:             "/var/lib/mysql",
 			LogFile:             "/var/log/mysql/mysqld.log",
 			SeedUser:            "",
 			SeedPassword:        "",
@@ -166,6 +165,7 @@ func NewConfig() *Config {
 			AvailableLocalSnapshotHostsCommand: "",
 			AvailableSnapshotHostsCommand:      "",
 			SnapshotVolumesFilter:              "",
+			SnapshotMountPoint:                 "",
 		},
 		ClonePlugin: clonePluginConfig{
 			Enabled: false,
