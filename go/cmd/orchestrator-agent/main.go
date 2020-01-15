@@ -41,7 +41,6 @@ func acceptSignal() {
 }
 
 func init() {
-	//log.SetFormatter(&prefixed.TextFormatter{FullTimestamp: true})
 	log.SetFormatter(&prefixed.TextFormatter{FullTimestamp: true, ForceFormatting: true})
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.InfoLevel)

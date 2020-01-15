@@ -17,7 +17,6 @@
 package dbagent
 
 import (
-	"database/sql"
 	"fmt"
 	"regexp"
 
@@ -31,14 +30,9 @@ type MySQLDatabase struct {
 	Size    int64
 }
 
-// MySQLClient describes MySQL connection
-type MySQLClient struct {
-	Conn *sql.DB
-}
-
 // NewMySQLClient initialize new MySQL Client
-func NewMySQLClient(user string, password string, port int) (*MySQLClient, error) {
-	mysqlClient := &MySQLClient{}
+func NewMySQLClient(user string, password string, port int) (*mysql.MySQLClient, error) {
+	mysqlClient := &mysql.MySQLClient{}
 	conn, err := mysql.OpenConnection(user, password, port)
 	if err != nil {
 		return mysqlClient, err
@@ -47,7 +41,7 @@ func NewMySQLClient(user string, password string, port int) (*MySQLClient, error
 	return mysqlClient, nil
 }
 
-func (m *MySQLClient) getDatabases() (databases []string, err error) {
+func getDatabases(m *mysql.MySQLClient) (databases []string, err error) {
 	query := `SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME NOT IN ('information_schema','mysql','performance_schema','sys');`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		db := m.GetString("SCHEMA_NAME")
@@ -57,7 +51,7 @@ func (m *MySQLClient) getDatabases() (databases []string, err error) {
 	return databases, err
 }
 
-func (m *MySQLClient) getEngines(dbname string) (engines []string, err error) {
+func getEngines(m *mysql.MySQLClient, dbname string) (engines []string, err error) {
 	query := `SELECT engine FROM information_schema.tables where TABLE_SCHEMA = ? and table_type = 'BASE TABLE' GROUP BY engine;`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
 		engine := m.GetString("engine")
@@ -67,7 +61,7 @@ func (m *MySQLClient) getEngines(dbname string) (engines []string, err error) {
 	return engines, err
 }
 
-func (m *MySQLClient) getDatabaseSize(dbname string) (size int64, err error) {
+func getDatabaseSize(m *mysql.MySQLClient, dbname string) (size int64, err error) {
 	query := `SELECT SUM(data_length+index_length+data_free) AS "size" FROM information_schema.tables where TABLE_SCHEMA = ?;`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
 		size = m.GetInt64("size")
@@ -77,18 +71,18 @@ func (m *MySQLClient) getDatabaseSize(dbname string) (size int64, err error) {
 }
 
 // GetMySQLDatabases return information about MySQL databases, size and engines
-func (m *MySQLClient) GetMySQLDatabases() (dbinfo map[string]*MySQLDatabase, err error) {
+func GetMySQLDatabases(m *mysql.MySQLClient) (dbinfo map[string]*MySQLDatabase, err error) {
 	dbinfo = make(map[string]*MySQLDatabase)
-	databases, err := m.getDatabases()
+	databases, err := getDatabases(m)
 	if err != nil {
 		return dbinfo, fmt.Errorf("Unable to get databases info: %+v", err)
 	}
 	for _, db := range databases {
-		engines, err := m.getEngines(db)
+		engines, err := getEngines(m, db)
 		if err != nil {
 			return dbinfo, fmt.Errorf("Unable to get enigines info: %+v", err)
 		}
-		size, err := m.getDatabaseSize(db)
+		size, err := getDatabaseSize(m, db)
 		if err != nil {
 			return dbinfo, fmt.Errorf("Unable to get databases size info: %+v", err)
 		}
@@ -98,7 +92,7 @@ func (m *MySQLClient) GetMySQLDatabases() (dbinfo map[string]*MySQLDatabase, err
 }
 
 // GetMySQLDatadir returns path to MySQL data directory
-func (m *MySQLClient) GetMySQLDatadir() (datadir string, err error) {
+func GetMySQLDatadir(m *mysql.MySQLClient) (datadir string, err error) {
 	query := `SHOW VARIABLES LIKE 'datadir'`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		datadir = m.GetString("Value")
@@ -108,7 +102,7 @@ func (m *MySQLClient) GetMySQLDatadir() (datadir string, err error) {
 }
 
 // GetMySQLLogFile returns path to MySQL log file
-func (m *MySQLClient) GetMySQLLogFile() (logFile string, err error) {
+func GetMySQLLogFile(m *mysql.MySQLClient) (logFile string, err error) {
 	query := `SHOW VARIABLES LIKE 'log_error'`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		logFile = m.GetString("Value")
@@ -118,7 +112,7 @@ func (m *MySQLClient) GetMySQLLogFile() (logFile string, err error) {
 }
 
 // GetMySQLVersion return version of installed MySQL
-func (m *MySQLClient) GetMySQLVersion() (version string, err error) {
+func GetMySQLVersion(m *mysql.MySQLClient) (version string, err error) {
 	query := `SELECT @@version AS version`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
 		version = m.GetString("version")

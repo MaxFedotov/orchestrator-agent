@@ -28,6 +28,7 @@ import (
 
 	"github.com/github/orchestrator-agent/go/dbagent"
 	"github.com/github/orchestrator-agent/go/helper/http"
+	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/github/orchestrator-agent/go/helper/ssl"
 	"github.com/github/orchestrator-agent/go/helper/token"
 	"github.com/github/orchestrator-agent/go/osagent"
@@ -43,19 +44,20 @@ type Agent struct {
 	Params         *AgentParams
 	Info           *AgentInfo
 	Config         *Config
-	SeedMethods    map[string]*seed.SeedMethod
+	SeedMethods    map[seed.Method]seed.Seed
 	ConfigFileName string
 	HTTPClient     *nethttp.Client
-	MySQLClient    *dbagent.MySQLClient
+	MySQLClient    *mysql.MySQLClient
 	LastTalkback   time.Time
 	Logger         *log.Entry
 	sync.RWMutex
 }
 
 type AgentParams struct {
-	Hostname string
-	Port     int
-	Token    string
+	Hostname              string
+	Port                  int
+	Token                 string
+	AvailiableSeedMethods map[seed.Method]*seed.MethodOpts
 }
 
 type AgentInfo struct {
@@ -174,6 +176,9 @@ func (agent *Agent) parseConfig() error {
 
 // Start agent
 func (agent *Agent) Start() error {
+	agent.Lock()
+	defer agent.Unlock()
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		return fmt.Errorf("Unable to get hostname: %+v", err)
@@ -189,8 +194,59 @@ func (agent *Agent) Start() error {
 	if err != nil {
 		return fmt.Errorf("Unable to connect to MySQL: %+v", err)
 	}
-	// here goes each of seedmethods initializations
-
+	seedBaseConfig := seed.Base{
+		MySQLClient:      agent.MySQLClient,
+		ExecWithSudo:     agent.Config.Common.ExecWithSudo,
+		SeedPort:         agent.Config.Common.SeedPort,
+		UseSSL:           agent.Config.Common.UseSSL,
+		SSLSkipVerify:    agent.Config.Common.SSLSkipVerify,
+		SSLCertFile:      agent.Config.Common.SSLCertFile,
+		SSLCAFile:        agent.Config.Common.SSLCAFile,
+		BackupDir:        agent.Config.Common.BackupDir,
+		BackupOldDatadir: agent.Config.Common.BackupOldDatadir,
+	}
+	seedMethods := make(map[seed.Method]seed.Seed)
+	availiableSeedMethods := make(map[seed.Method]*seed.MethodOpts)
+	if agent.Config.LVM.Enabled {
+		lvmOpts := seed.MethodOpts{
+			DatabaseSelection: false,
+			BackupSide:        seed.Source,
+		}
+		lvm, err := seed.New(
+			seed.LVM,
+			&seedBaseConfig,
+			&lvmOpts,
+			log.WithFields(log.Fields{"prefix": "LVM"}),
+			agent.Config.LVM,
+		)
+		if err != nil {
+			agent.Logger.WithField("error", err).Fatal("Unable to use LVM seed method")
+		} else {
+			seedMethods[seed.LVM] = lvm
+			availiableSeedMethods[seed.LVM] = &lvmOpts
+		}
+	}
+	if agent.Config.Xtrabackup.Enabled {
+		xtrabackupOpts := seed.MethodOpts{
+			DatabaseSelection: false,
+			BackupSide:        seed.Target,
+		}
+		xtrabackup, err := seed.New(
+			seed.Xtrabackup,
+			&seedBaseConfig,
+			&xtrabackupOpts,
+			log.WithFields(log.Fields{"prefix": "XTRABACKUP"}),
+			agent.Config.Xtrabackup,
+		)
+		if err != nil {
+			agent.Logger.WithField("error", err).Fatal("Unable to use Xtrabackup seed method")
+		} else {
+			seedMethods[seed.Xtrabackup] = xtrabackup
+			availiableSeedMethods[seed.Xtrabackup] = &xtrabackupOpts
+		}
+	}
+	agent.Params.AvailiableSeedMethods = availiableSeedMethods
+	agent.SeedMethods = seedMethods
 	go agent.ContinuousOperation()
 	go agent.ServeHTTP()
 	return nil
@@ -326,7 +382,7 @@ func (agent *Agent) GetAgentInfo() *AgentInfo {
 		agent.Logger.WithField("error", err).Error("Unable to get information about MySQL status (running/stopped)")
 	}
 	agent.Info.MySQLPort = agent.Config.Mysql.Port
-	agent.Info.MySQLDatadir, err = agent.MySQLClient.GetMySQLDatadir()
+	agent.Info.MySQLDatadir, err = dbagent.GetMySQLDatadir(agent.MySQLClient)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir path")
 	}
@@ -338,15 +394,15 @@ func (agent *Agent) GetAgentInfo() *AgentInfo {
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir free space info")
 	}
-	agent.Info.MySQLVersion, err = agent.MySQLClient.GetMySQLVersion()
+	agent.Info.MySQLVersion, err = dbagent.GetMySQLVersion(agent.MySQLClient)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL version info")
 	}
-	agent.Info.MySQLDatabases, err = agent.MySQLClient.GetMySQLDatabases()
+	agent.Info.MySQLDatabases, err = dbagent.GetMySQLDatabases(agent.MySQLClient)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL databases info")
 	}
-	mySQLLogFile, err := agent.MySQLClient.GetMySQLLogFile()
+	mySQLLogFile, err := dbagent.GetMySQLLogFile(agent.MySQLClient)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL log file info")
 	} else {

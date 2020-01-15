@@ -414,6 +414,14 @@ func (this *HttpAPI) getAgent(params martini.Params, r render.Render, req *http.
 	r.JSON(200, output)
 }
 
+// TODELETE
+func (this *HttpAPI) getAgentParams(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	r.JSON(200, agent.Params)
+}
+
 /*
 // DeleteMySQLDataDir compeltely erases MySQL data directory. Use with care!
 func (this *HttpAPI) DeleteMySQLDataDir(params martini.Params, r render.Render, req *http.Request) {
@@ -620,6 +628,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 
 	// status
 	m.Get("/api/get-agent", this.getAgent)
+	m.Get("/api/get-agent-params", this.getAgentParams) // TO DELETE
 	//m.Get("/api/seed-status", this.seedStatus)
 
 	// seed process

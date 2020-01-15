@@ -5,6 +5,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/github/orchestrator-agent/go/helper/config"
+	"github.com/github/orchestrator-agent/go/seed"
 )
 
 type commonConfig struct {
@@ -44,55 +45,23 @@ type loggingConfig struct {
 
 type mysqlConfig struct {
 	Port                int    `toml:"port"`
-	LogFile             string `toml:"datadir"`
 	SeedUser            string `toml:"seed-user"`
 	SeedPassword        string `toml:"seed-password"`
 	ReplicationUser     string `toml:"replication-user"`
 	ReplicationPassword string `toml:"replication-password"`
 }
 
-type mysqldumpConfig struct {
-	Enabled  bool `toml:"enabled"`
-	Compress bool `toml:"compress"`
-}
-
-type mydumperConfig struct {
-	Enabled         bool `toml:"enabled"`
-	ParallelThreads int  `toml:"parallel-threads"`
-	RowsChunkSize   int  `toml:"rows-chunk-size"`
-	Compress        bool `toml:"compress"`
-}
-
-type xtrabackupConfig struct {
-	Enabled         bool `toml:"enabled"`
-	ParallelThreads int  `toml:"parallel-threads"`
-	Compress        bool `toml:"compress"`
-}
-
-type lvmConfig struct {
-	Enabled                            bool   `toml:"enabled"`
-	CreateSnapshotCommand              string `toml:"create-snapshot-command"`
-	AvailableLocalSnapshotHostsCommand string `toml:"available-local-snapshot-hosts-command"`
-	AvailableSnapshotHostsCommand      string `toml:"available-snapshot-hosts-command"`
-	SnapshotVolumesFilter              string `toml:"snapshot-volumes-filter"`
-	SnapshotMountPoint                 string `toml:"snapshot-mount-point"`
-}
-
-type clonePluginConfig struct {
-	Enabled bool `toml:"enabled"`
-}
-
 // Config is used to store all configuration parameters
 type Config struct {
-	Common       commonConfig       `toml:"common"`
-	Orchestrator orchestratorConfig `toml:"orchestrator"`
-	Logging      loggingConfig      `toml:"logging"`
-	Mysql        mysqlConfig        `toml:"mysql"`
-	MysqlDump    mysqldumpConfig    `toml:"mysqldump"`
-	Mydumper     mydumperConfig     `toml:"mydumper"`
-	Xtrabackup   xtrabackupConfig   `toml:"xtrabackup"`
-	LVM          lvmConfig          `toml:"lvm"`
-	ClonePlugin  clonePluginConfig  `toml:"clone_plugin"`
+	Common       commonConfig            `toml:"common"`
+	Orchestrator orchestratorConfig      `toml:"orchestrator"`
+	Logging      loggingConfig           `toml:"logging"`
+	Mysql        mysqlConfig             `toml:"mysql"`
+	MysqlDump    *seed.MysqldumpConfig   `toml:"mysqldump"`
+	Mydumper     *seed.MydumperConfig    `toml:"mydumper"`
+	Xtrabackup   *seed.XtrabackupConfig  `toml:"xtrabackup"`
+	LVM          *seed.LVMConfig         `toml:"lvm"`
+	ClonePlugin  *seed.ClonePluginConfig `toml:"clone_plugin"`
 }
 
 // NewConfig sets default values for configuration parameters
@@ -138,28 +107,27 @@ func NewConfig() *Config {
 		},
 		Mysql: mysqlConfig{
 			Port:                3306,
-			LogFile:             "/var/log/mysql/mysqld.log",
 			SeedUser:            "",
 			SeedPassword:        "",
 			ReplicationUser:     "",
 			ReplicationPassword: "",
 		},
-		MysqlDump: mysqldumpConfig{
+		MysqlDump: &seed.MysqldumpConfig{
 			Enabled:  true,
 			Compress: true,
 		},
-		Mydumper: mydumperConfig{
+		Mydumper: &seed.MydumperConfig{
 			Enabled:         false,
 			ParallelThreads: 1,
 			RowsChunkSize:   0,
 			Compress:        false,
 		},
-		Xtrabackup: xtrabackupConfig{
+		Xtrabackup: &seed.XtrabackupConfig{
 			Enabled:         false,
 			ParallelThreads: 1,
 			Compress:        false,
 		},
-		LVM: lvmConfig{
+		LVM: &seed.LVMConfig{
 			Enabled:                            false,
 			CreateSnapshotCommand:              "",
 			AvailableLocalSnapshotHostsCommand: "",
@@ -167,7 +135,7 @@ func NewConfig() *Config {
 			SnapshotVolumesFilter:              "",
 			SnapshotMountPoint:                 "",
 		},
-		ClonePlugin: clonePluginConfig{
+		ClonePlugin: &seed.ClonePluginConfig{
 			Enabled: false,
 		},
 	}

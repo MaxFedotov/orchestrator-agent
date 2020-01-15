@@ -2,17 +2,21 @@ package seed
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/github/orchestrator-agent/go/helper/cmd"
 	log "github.com/sirupsen/logrus"
 )
 
-type Mysqldump struct {
-	DatabaseSelection bool
-	SeedSide          seedSide
-	Logger            *log.Entry
-	ExecBackup        string //do we need it?
-	ExecRestore       string // do we need it
+type MysqldumpSeed struct {
+	*Base
+	*MethodOpts
+	Config *MysqldumpConfig
+	Logger *log.Entry
+}
+
+type MysqldumpConfig struct {
+	Enabled  bool `toml:"enabled"`
+	Compress bool `toml:"compress"`
 }
 
 const (
@@ -20,31 +24,35 @@ const (
 	mysqlbackupCompressedFileName = "backup.sql.gz"
 )
 
-func (m Mysqldump) Prepare(ctx context.Context) error {
-	fmt.Println("This is mysqldump prepare")
+func (sm *MysqldumpSeed) Prepare(ctx context.Context, side Side) error {
+	sm.Logger.Info("This is mysqldump prepare")
 	return nil
 }
 
-func (m Mysqldump) Backup(ctx context.Context) error {
-	fmt.Println("This is mysqldump backup")
+func (sm *MysqldumpSeed) Backup(ctx context.Context) error {
+	sm.Logger.Info("This is mysqldump backup")
 	return nil
 }
 
-func (m Mysqldump) Restore(ctx context.Context) error {
-	fmt.Println("This is mysqldump restore")
+func (sm *MysqldumpSeed) Restore(ctx context.Context) error {
+	sm.Logger.Info("This is mysqldump restore")
 	return nil
 }
 
-func (m Mysqldump) GetMetadata(ctx context.Context) (BackupMetadata, error) {
-	fmt.Println("This is mysqldump metadata")
-	return BackupMetadata{}, nil
+func (sm *MysqldumpSeed) GetMetadata(ctx context.Context) (*BackupMetadata, error) {
+	sm.Logger.Info("This is mysqldump metadata")
+	return &BackupMetadata{}, nil
 }
 
-func (m Mysqldump) Cleanup(ctx context.Context) error {
-	fmt.Println("This is mysqldump cleanup")
+func (sm *MysqldumpSeed) Cleanup(ctx context.Context, side Side) error {
+	sm.Logger.Info("This is mysqldump cleanup")
 	return nil
 }
 
-func (m Mysqldump) IsAvailiable() bool {
+func (sm *MysqldumpSeed) IsAvailable() bool {
+	err := cmd.CommandRun("mysqldump --version", sm.ExecWithSudo)
+	if err != nil {
+		return false
+	}
 	return true
 }
