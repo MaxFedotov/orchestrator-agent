@@ -113,5 +113,50 @@ func New(seedMethod Method, baseConfig *Base, methodOpts *MethodOpts, logger *lo
 		}
 		return nil, fmt.Errorf("unable to parse Xtrabackup config")
 	}
+	if seedMethod == ClonePlugin {
+		if conf, ok := seedMethodConfig.(*ClonePluginConfig); ok {
+			sm := &ClonePluginSeed{
+				Base:       baseConfig,
+				MethodOpts: methodOpts,
+				Config:     conf,
+				Logger:     logger,
+			}
+			if sm.IsAvailable() {
+				return sm, nil
+			}
+			return nil, fmt.Errorf("Clone plugin seed method unavailable")
+		}
+		return nil, fmt.Errorf("unable to parse Clone plugin config")
+	}
+	if seedMethod == Mydumper {
+		if conf, ok := seedMethodConfig.(*MydumperConfig); ok {
+			sm := &MydumperSeed{
+				Base:       baseConfig,
+				MethodOpts: methodOpts,
+				Config:     conf,
+				Logger:     logger,
+			}
+			if sm.IsAvailable() {
+				return sm, nil
+			}
+			return nil, fmt.Errorf("Mydumper seed method unavailable")
+		}
+		return nil, fmt.Errorf("unable to parse Mydumper config")
+	}
+	if seedMethod == Mysqldump {
+		if conf, ok := seedMethodConfig.(*MysqldumpConfig); ok {
+			sm := &MysqldumpSeed{
+				Base:       baseConfig,
+				MethodOpts: methodOpts,
+				Config:     conf,
+				Logger:     logger,
+			}
+			if sm.IsAvailable() {
+				return sm, nil
+			}
+			return nil, fmt.Errorf("Mysqldump seed method unavailable")
+		}
+		return nil, fmt.Errorf("unable to parse Mysqldump config")
+	}
 	return nil, fmt.Errorf("unknown seed method")
 }

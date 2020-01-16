@@ -30,6 +30,6 @@ func OpenConnection(user string, password string, port int) (*sql.DB, error) {
 }
 
 func QueryData(db *sql.DB, query string, argsArray []interface{}, onRow func(sqlutils.RowMap) error) error {
-	logger.WithFields(log.Fields{"query": query}).Debug("Query executed")
+	logger.WithFields(log.Fields{"query": query, "params": argsArray}).Debug("Query executed")
 	return sqlutils.QueryRowsMap(db, query, onRow, argsArray...)
 }

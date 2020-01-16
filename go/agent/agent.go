@@ -224,12 +224,13 @@ func (agent *Agent) Start() error {
 		} else {
 			seedMethods[seed.LVM] = lvm
 			availiableSeedMethods[seed.LVM] = &lvmOpts
+			agent.Logger.Info("LVM seed method initialized")
 		}
 	}
 	if agent.Config.Xtrabackup.Enabled {
 		xtrabackupOpts := seed.MethodOpts{
 			DatabaseSelection: false,
-			BackupSide:        seed.Target,
+			BackupSide:        seed.Source,
 		}
 		xtrabackup, err := seed.New(
 			seed.Xtrabackup,
@@ -243,6 +244,67 @@ func (agent *Agent) Start() error {
 		} else {
 			seedMethods[seed.Xtrabackup] = xtrabackup
 			availiableSeedMethods[seed.Xtrabackup] = &xtrabackupOpts
+			agent.Logger.Info("Xtrabackup seed method initialized")
+		}
+	}
+	if agent.Config.ClonePlugin.Enabled {
+		clonePluginOpts := seed.MethodOpts{
+			DatabaseSelection: false,
+			BackupSide:        seed.Source,
+		}
+		clonePlugin, err := seed.New(
+			seed.ClonePlugin,
+			&seedBaseConfig,
+			&clonePluginOpts,
+			log.WithFields(log.Fields{"prefix": "CLONE PLUGIN"}),
+			agent.Config.ClonePlugin,
+		)
+		if err != nil {
+			agent.Logger.WithField("error", err).Fatal("Unable to use Clone plugin seed method")
+		} else {
+			seedMethods[seed.ClonePlugin] = clonePlugin
+			availiableSeedMethods[seed.ClonePlugin] = &clonePluginOpts
+			agent.Logger.Info("Clone plugin seed method initialized")
+		}
+	}
+	if agent.Config.MysqlDump.Enabled {
+		mysqldumpOpts := seed.MethodOpts{
+			DatabaseSelection: true,
+			BackupSide:        seed.Target,
+		}
+		mysqldump, err := seed.New(
+			seed.Mysqldump,
+			&seedBaseConfig,
+			&mysqldumpOpts,
+			log.WithFields(log.Fields{"prefix": "MYSQLDUMP"}),
+			agent.Config.MysqlDump,
+		)
+		if err != nil {
+			agent.Logger.WithField("error", err).Fatal("Unable to use Mysqldump seed method")
+		} else {
+			seedMethods[seed.Mysqldump] = mysqldump
+			availiableSeedMethods[seed.Mysqldump] = &mysqldumpOpts
+			agent.Logger.Info("Mysqldump seed method initialized")
+		}
+	}
+	if agent.Config.Mydumper.Enabled {
+		mydumperOpts := seed.MethodOpts{
+			DatabaseSelection: true,
+			BackupSide:        seed.Target,
+		}
+		mydumper, err := seed.New(
+			seed.Mydumper,
+			&seedBaseConfig,
+			&mydumperOpts,
+			log.WithFields(log.Fields{"prefix": "MYDUMPER"}),
+			agent.Config.Mydumper,
+		)
+		if err != nil {
+			agent.Logger.WithField("error", err).Fatal("Unable to use Mydumper seed method")
+		} else {
+			seedMethods[seed.Mydumper] = mydumper
+			availiableSeedMethods[seed.Mydumper] = &mydumperOpts
+			agent.Logger.Info("Mydumper seed method initialized")
 		}
 	}
 	agent.Params.AvailiableSeedMethods = availiableSeedMethods
