@@ -17,6 +17,8 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -57,6 +59,7 @@ type AgentParams struct {
 	Hostname              string
 	Port                  int
 	Token                 string
+	MySQLPort             int
 	AvailiableSeedMethods map[seed.Method]*seed.MethodOpts
 }
 
@@ -68,7 +71,6 @@ type AgentInfo struct {
 	BackupDir            string
 	BackupDirDiskFree    int64
 	MySQLRunning         bool
-	MySQLPort            int
 	MySQLDatadir         string
 	MySQLDatadirDiskUsed int64
 	MySQLDatadirDiskFree int64
@@ -184,9 +186,10 @@ func (agent *Agent) Start() error {
 		return fmt.Errorf("Unable to get hostname: %+v", err)
 	}
 	agent.Params = &AgentParams{
-		Hostname: hostname,
-		Port:     agent.Config.Common.Port,
-		Token:    token.ProcessToken.Hash,
+		Hostname:  hostname,
+		Port:      agent.Config.Common.Port,
+		Token:     token.ProcessToken.Hash,
+		MySQLPort: agent.Config.Mysql.Port,
 	}
 	agent.HTTPClient = http.InitHTTPClient(agent.Config.Common.HTTPTimeout, agent.Config.Common.SSLSkipVerify, agent.Config.Common.SSLCAFile, agent.Config.Common.UseMutualTLS, agent.Config.Common.SSLCertFile, agent.Config.Common.SSLPrivateKeyFile, agent.Logger)
 
@@ -363,10 +366,14 @@ func (agent *Agent) ServeHTTP() {
 
 //SubmitAgent registers agent on Orchestrator
 func (agent *Agent) SubmitAgent() {
-	url := fmt.Sprintf("%s:%d/api/submit-agent/%s/%d/%s", agent.Config.Orchestrator.URL, agent.Config.Orchestrator.AgentsPort, agent.Params.Hostname, agent.Params.Port, agent.Params.Token)
-	agent.Logger.WithField("url", url).Debug("Submiting agent to Orchestrator")
+	url := fmt.Sprintf("%s:%d/api/submit-agent", agent.Config.Orchestrator.URL, agent.Config.Orchestrator.AgentsPort)
+	payload, err := json.Marshal(agent.Params)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to marshall agent info")
+	}
+	agent.Logger.WithFields(log.Fields{"url": url, "payload": payload}).Debug("Submiting agent to Orchestrator")
 
-	response, err := agent.HTTPClient.Get(url)
+	response, err := agent.HTTPClient.Post(url, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to submit agent to Orchestrator")
 	} else {
@@ -443,7 +450,6 @@ func (agent *Agent) GetAgentInfo() *AgentInfo {
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get information about MySQL status (running/stopped)")
 	}
-	agent.Info.MySQLPort = agent.Config.Mysql.Port
 	agent.Info.MySQLDatadir, err = dbagent.GetMySQLDatadir(agent.MySQLClient)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir path")

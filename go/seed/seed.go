@@ -74,11 +74,9 @@ type MethodOpts struct {
 }
 
 type BackupMetadata struct {
-	LogFile        string
-	LogPos         int64
-	GtidExecuted   string
-	MasterUser     string // This is optional field. If it is empty, will be read from configuration file    OR WE DON'T NEED IT AT ALL AND WILL USE ReplicationCredentialsQuery
-	MasterPassword string // This is optional field. If it is empty, will be read from configuration file    OR WE DON'T NEED IT AT ALL AND WILL USE ReplicationCredentialsQuery
+	LogFile      string
+	LogPos       int64
+	GtidExecuted string
 }
 
 // New creates seed method
