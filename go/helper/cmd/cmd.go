@@ -2,58 +2,96 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/pipe.v2"
 )
 
 var logger = log.WithFields(log.Fields{"prefix": "CMD"})
 
 func commandSplit(commandText string) (string, []string) {
-	tokens := regexp.MustCompile(`[ ]+`).Split(strings.TrimSpace(commandText), -1)
-	return tokens[0], tokens[1:]
+	var args []string
+	cmd := ""
+	re := regexp.MustCompile(`\d?[-.]?\w+|-.*|"(?:\\"|[^"])+"|'(?:\\"|[^"])+'`)
+	res := re.FindAllStringSubmatch(commandText, -1)
+
+	for idx, match := range res {
+		for _, arg := range match {
+			if idx == 0 {
+				cmd = arg
+			} else {
+				if arg == "' '" || arg == "\" \"" {
+					args = append(args, " ")
+				} else {
+					args = append(args, arg)
+				}
+			}
+		}
+	}
+	return cmd, args
 }
 
-func execCmd(commandText string, execWithSudo bool) *exec.Cmd {
+func execCmd(commandText string, execWithSudo bool) pipe.Pipe {
 	if execWithSudo {
 		commandText = "sudo " + commandText
 	}
-	logger.WithFields(log.Fields{"cmd": commandText}).Debug("Command executed")
 	command, args := commandSplit(commandText)
-	return exec.Command(command, args...)
+	return pipe.Exec(command, args...)
 }
 
 // CommandOutput executes a command and return output bytes
 func CommandOutput(commandText string, execWithSudo bool) ([]byte, error) {
-	cmd := execCmd(commandText, execWithSudo)
-	outputBytes, err := cmd.Output()
-	if err != nil {
-		return nil, err
+	logger.WithFields(log.Fields{"cmd": commandText}).Debug("Executing command")
+	commands := []pipe.Pipe{}
+	commandsTextSplitted := strings.Split(commandText, ">")
+	for _, cmd := range strings.Split(commandsTextSplitted[0], "|") {
+		commands = append(commands, execCmd(string(strings.TrimSpace(cmd)), execWithSudo))
 	}
-	return outputBytes, nil
+	if len(commandsTextSplitted) > 1 {
+		commands = append(commands, pipe.AppendFile(strings.TrimSpace(commandsTextSplitted[1]), 0644))
+	}
+	p := pipe.Line(commands...)
+	outputBytes, err := pipe.Output(p)
+	return outputBytes, err
 }
 
 // CommandRun executes a command
 func CommandRun(commandText string, execWithSudo bool) error {
-	cmd := execCmd(commandText, execWithSudo)
-	err := cmd.Run()
-	if err != nil {
-		return err
+	logger.WithFields(log.Fields{"cmd": commandText}).Debug("Executing command")
+	commands := []pipe.Pipe{}
+	commandsTextSplitted := strings.Split(commandText, ">")
+	for _, cmd := range strings.Split(commandsTextSplitted[0], "|") {
+		commands = append(commands, execCmd(string(strings.TrimSpace(cmd)), execWithSudo))
 	}
-	return nil
+	if len(commandsTextSplitted) > 1 {
+		commands = append(commands, pipe.AppendFile(strings.TrimSpace(commandsTextSplitted[1]), 0644))
+	}
+	p := pipe.Line(commands...)
+	err := pipe.Run(p)
+	return err
 }
 
 // CommandRunFunc executes a command and runs specified function
-func CommandRunFunc(commandText string, execWithSudo bool, onCommand func(*exec.Cmd)) error {
-	cmd := execCmd(commandText, execWithSudo)
-	onCommand(cmd)
-	err := cmd.Run()
-	if err != nil {
-		return err
+func CommandRunWithFunc(commandText string, execWithSudo bool, onCommand func(*pipe.State)) error {
+	logger.WithFields(log.Fields{"cmd": commandText}).Debug("Executing command")
+	s := pipe.NewState(nil, nil)
+	commands := []pipe.Pipe{}
+	commandsTextSplitted := strings.Split(commandText, ">")
+	for _, cmd := range strings.Split(commandsTextSplitted[0], "|") {
+		commands = append(commands, execCmd(string(strings.TrimSpace(cmd)), execWithSudo))
 	}
-	return nil
+	if len(commandsTextSplitted) > 1 {
+		commands = append(commands, pipe.AppendFile(strings.TrimSpace(commandsTextSplitted[1]), 0644))
+	}
+	p := pipe.Line(commands...)
+	err := p(s)
+	if err == nil {
+		onCommand(s)
+		err = s.RunTasks()
+	}
+	return err
 }
 
 func OutputLines(commandOutput []byte) []string {
