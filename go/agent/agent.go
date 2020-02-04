@@ -43,15 +43,18 @@ import (
 )
 
 type Agent struct {
-	Params         *AgentParams
-	Info           *AgentInfo
-	Config         *Config
-	SeedMethods    map[seed.Method]seed.Seed
-	ConfigFileName string
-	HTTPClient     *nethttp.Client
-	MySQLClient    *mysql.MySQLClient
-	LastTalkback   time.Time
-	Logger         *log.Entry
+	Params          *AgentParams
+	Info            *AgentInfo
+	Config          *Config
+	ConfigFileName  string
+	HTTPClient      *nethttp.Client
+	MySQLClient     *mysql.MySQLClient
+	LastTalkback    time.Time
+	Logger          *log.Entry
+	StatusChan      chan *seed.StageStatus
+	SeedMethods     map[seed.Method]seed.Plugin
+	SeedStageStatus map[int]*seed.StageStatus
+	ActiveSeedID    int
 	sync.RWMutex
 }
 
@@ -197,8 +200,12 @@ func (agent *Agent) Start() error {
 	if err != nil {
 		return fmt.Errorf("Unable to connect to MySQL: %+v", err)
 	}
+	agent.StatusChan = make(chan *seed.StageStatus)
 	seedBaseConfig := seed.Base{
 		MySQLClient:      agent.MySQLClient,
+		MySQLPort:        agent.Config.Mysql.Port,
+		SeedUser:         agent.Config.Mysql.SeedUser,
+		SeedPassword:     agent.Config.Mysql.SeedPassword,
 		ExecWithSudo:     agent.Config.Common.ExecWithSudo,
 		SeedPort:         agent.Config.Common.SeedPort,
 		UseSSL:           agent.Config.Common.UseSSL,
@@ -207,13 +214,15 @@ func (agent *Agent) Start() error {
 		SSLCAFile:        agent.Config.Common.SSLCAFile,
 		BackupDir:        agent.Config.Common.BackupDir,
 		BackupOldDatadir: agent.Config.Common.BackupOldDatadir,
+		StatusChan:       agent.StatusChan,
 	}
-	seedMethods := make(map[seed.Method]seed.Seed)
+	seedMethods := make(map[seed.Method]seed.Plugin)
 	availiableSeedMethods := make(map[seed.Method]*seed.MethodOpts)
+	seedStageStatus := make(map[int]*seed.StageStatus)
+	agent.SeedStageStatus = seedStageStatus
 	if agent.Config.LVM.Enabled {
 		lvmOpts := seed.MethodOpts{
-			DatabaseSelection: false,
-			BackupSide:        seed.Source,
+			BackupSide: seed.Source,
 		}
 		lvm, err := seed.New(
 			seed.LVM,
@@ -232,8 +241,7 @@ func (agent *Agent) Start() error {
 	}
 	if agent.Config.Xtrabackup.Enabled {
 		xtrabackupOpts := seed.MethodOpts{
-			DatabaseSelection: false,
-			BackupSide:        seed.Source,
+			BackupSide: seed.Source,
 		}
 		xtrabackup, err := seed.New(
 			seed.Xtrabackup,
@@ -252,8 +260,7 @@ func (agent *Agent) Start() error {
 	}
 	if agent.Config.ClonePlugin.Enabled {
 		clonePluginOpts := seed.MethodOpts{
-			DatabaseSelection: false,
-			BackupSide:        seed.Source,
+			BackupSide: seed.Source,
 		}
 		clonePlugin, err := seed.New(
 			seed.ClonePlugin,
@@ -272,8 +279,7 @@ func (agent *Agent) Start() error {
 	}
 	if agent.Config.MysqlDump.Enabled {
 		mysqldumpOpts := seed.MethodOpts{
-			DatabaseSelection: true,
-			BackupSide:        seed.Target,
+			BackupSide: seed.Target,
 		}
 		mysqldump, err := seed.New(
 			seed.Mysqldump,
@@ -292,8 +298,7 @@ func (agent *Agent) Start() error {
 	}
 	if agent.Config.Mydumper.Enabled {
 		mydumperOpts := seed.MethodOpts{
-			DatabaseSelection: true,
-			BackupSide:        seed.Target,
+			BackupSide: seed.Target,
 		}
 		mydumper, err := seed.New(
 			seed.Mydumper,
@@ -314,7 +319,17 @@ func (agent *Agent) Start() error {
 	agent.SeedMethods = seedMethods
 	go agent.ContinuousOperation()
 	go agent.ServeHTTP()
+	go agent.UpdateSeedStatus()
 	return nil
+}
+
+func (agent *Agent) UpdateSeedStatus() {
+	for {
+		select {
+		case seedStatus := <-agent.StatusChan:
+			agent.SeedStageStatus[agent.ActiveSeedID] = seedStatus
+		}
+	}
 }
 
 func (agent *Agent) ServeHTTP() {
@@ -371,7 +386,7 @@ func (agent *Agent) SubmitAgent() {
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to marshall agent info")
 	}
-	agent.Logger.WithFields(log.Fields{"url": url, "payload": payload}).Debug("Submiting agent to Orchestrator")
+	agent.Logger.WithFields(log.Fields{"url": url}).Debug("Submiting agent to Orchestrator")
 
 	response, err := agent.HTTPClient.Post(url, "application/json", bytes.NewBuffer(payload))
 	if err != nil {

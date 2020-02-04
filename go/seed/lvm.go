@@ -1,7 +1,6 @@
 package seed
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/github/orchestrator-agent/go/helper/cmd"
@@ -24,29 +23,25 @@ type LVMConfig struct {
 	SnapshotMountPoint                 string `toml:"snapshot-mount-point"`
 }
 
-func (sm *LVMSeed) Prepare(ctx context.Context, side Side) error {
+func (sm *LVMSeed) Prepare(side Side) {
 	sm.Logger.Info("This is LVM prepare")
-	return nil
 }
 
-func (sm *LVMSeed) Backup(ctx context.Context) error {
+func (sm *LVMSeed) Backup(seedHost string, mysqlPort int) {
 	sm.Logger.Info("This is LVM backup")
-	return nil
 }
 
-func (sm *LVMSeed) Restore(ctx context.Context) error {
+func (sm *LVMSeed) Restore() {
 	sm.Logger.Info("This is LVM restore")
-	return nil
 }
 
-func (sm *LVMSeed) GetMetadata(ctx context.Context) (*BackupMetadata, error) {
+func (sm *LVMSeed) GetMetadata() (*BackupMetadata, error) {
 	sm.Logger.Info("This is LVM metadata")
 	return &BackupMetadata{}, nil
 }
 
-func (sm *LVMSeed) Cleanup(ctx context.Context, side Side) error {
+func (sm *LVMSeed) Cleanup(side Side) {
 	sm.Logger.Info("This is LVM cleanup")
-	return nil
 }
 
 func (sm *LVMSeed) IsAvailable() bool {

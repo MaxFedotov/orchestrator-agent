@@ -2,7 +2,6 @@ package seed
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 
 	"github.com/github/orchestrator-agent/go/helper/mysql"
@@ -18,6 +17,11 @@ const (
 
 func (s Side) String() string {
 	return [...]string{"Target", "Source"}[s]
+}
+
+var ToSide = map[string]Side{
+	"Target": Target,
+	"Source": Source,
 }
 
 // MarshalJSON marshals the enum as a quoted json string
@@ -47,17 +51,28 @@ func (m Method) MarshalText() ([]byte, error) {
 	return []byte(m.String()), nil
 }
 
-type Seed interface {
-	Prepare(ctx context.Context, side Side) error
-	Backup(ctx context.Context) error
-	Restore(ctx context.Context) error
-	GetMetadata(ctx context.Context) (*BackupMetadata, error)
-	Cleanup(ctx context.Context, side Side) error
+var ToMethod = map[string]Method{
+	"ClonePlugin": ClonePlugin,
+	"LVM":         LVM,
+	"Mydumper":    Mydumper,
+	"Mysqldump":   Mysqldump,
+	"Xtrabackup":  Xtrabackup,
+}
+
+type Plugin interface {
+	Prepare(side Side)
+	Backup(seedHost string, mysqlPort int)
+	Restore()
+	GetMetadata() (*BackupMetadata, error)
+	Cleanup(side Side)
 	IsAvailable() bool
 }
 
 type Base struct {
 	MySQLClient      *mysql.MySQLClient
+	MySQLPort        int
+	SeedUser         string
+	SeedPassword     string
 	ExecWithSudo     bool
 	SeedPort         int
 	UseSSL           bool
@@ -66,11 +81,11 @@ type Base struct {
 	SSLCAFile        string
 	BackupDir        string
 	BackupOldDatadir bool
+	StatusChan       chan *StageStatus
 }
 
 type MethodOpts struct {
-	DatabaseSelection bool
-	BackupSide        Side
+	BackupSide Side
 }
 
 type BackupMetadata struct {
@@ -79,8 +94,8 @@ type BackupMetadata struct {
 	GtidExecuted string
 }
 
-// New creates seed method
-func New(seedMethod Method, baseConfig *Base, methodOpts *MethodOpts, logger *log.Entry, seedMethodConfig interface{}) (Seed, error) {
+// New creates seed plugin
+func New(seedMethod Method, baseConfig *Base, methodOpts *MethodOpts, logger *log.Entry, seedMethodConfig interface{}) (Plugin, error) {
 	if seedMethod == LVM {
 		if conf, ok := seedMethodConfig.(*LVMConfig); ok {
 			sm := &LVMSeed{

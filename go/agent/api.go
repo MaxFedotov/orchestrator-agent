@@ -30,6 +30,7 @@ import (
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/helper/token"
 	"github.com/github/orchestrator-agent/go/osagent"
+	"github.com/github/orchestrator-agent/go/seed"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/render"
 )
@@ -131,21 +132,6 @@ func (this *HttpAPI) Unmount(params martini.Params, r render.Render, req *http.R
 	r.JSON(200, output)
 }
 
-// DiskUsage returns the number of bytes of a give ndirectory (recursive)
-func (this *HttpAPI) DiskUsage(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req); err != nil {
-		return
-	}
-	path := req.URL.Query().Get("path")
-
-	output, err := osagent.DiskUsage(path)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
 // CreateSnapshot lists dc-local available snapshots for this host
 func (this *HttpAPI) CreateSnapshot(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
@@ -160,11 +146,11 @@ func (this *HttpAPI) CreateSnapshot(params martini.Params, r render.Render, req 
 }
 
 // MySQLStop shuts down the MySQL service
-func (this *HttpAPI) MySQLStop(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) MySQLStop(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.MySQLStop()
+	err := osagent.MySQLStop(agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -173,11 +159,11 @@ func (this *HttpAPI) MySQLStop(params martini.Params, r render.Render, req *http
 }
 
 // MySQLStop starts the MySQL service
-func (this *HttpAPI) MySQLStart(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) MySQLStart(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.MySQLStart()
+	err := osagent.MySQLStart(agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -186,11 +172,11 @@ func (this *HttpAPI) MySQLStart(params martini.Params, r render.Render, req *htt
 }
 
 // PostCopy
-func (this *HttpAPI) PostCopy(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) PostCopy(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	err := osagent.PostCopy()
+	err := osagent.PostCopy(agent.Config.Common.PostSeedCommand, agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -199,22 +185,13 @@ func (this *HttpAPI) PostCopy(params martini.Params, r render.Render, req *http.
 }
 
 // ReceiveMySQLSeedData
-func (this *HttpAPI) ReceiveMySQLSeedData(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) ReceiveMySQLSeedData(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	var err error
 	if err = this.validateToken(r, req); err != nil {
 		return
 	}
-	go osagent.ReceiveMySQLSeedData(params["seedId"])
+	go osagent.ReceiveMySQLSeedData(params["seedId"], agent.Config.Common.ExecWithSudo)
 	r.JSON(200, err == nil)
-}
-
-// AbortSeed
-func (this *HttpAPI) AbortSeed(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req); err != nil {
-		return
-	}
-	osagent.AbortSeed(params["seedId"])
-	r.JSON(200, true)
 }
 
 // SeedCommandCompleted
@@ -247,13 +224,14 @@ func (this *HttpAPI) Status(params martini.Params, r render.Render, req *http.Re
 }
 
 // RelayLogIndexFile returns mysql relay log index file, full path
-func (this *HttpAPI) RelayLogIndexFile(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) RelayLogIndexFile(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
 
-	output, err := osagent.GetRelayLogIndexFileName()
+	output, err := osagent.GetRelayLogIndexFileName(agent.Info.MySQLDatadir, agent.Config.Common.ExecWithSudo)
 	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to find relay log index file")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -261,13 +239,14 @@ func (this *HttpAPI) RelayLogIndexFile(params martini.Params, r render.Render, r
 }
 
 // RelayLogFiles returns the list of active relay logs
-func (this *HttpAPI) RelayLogFiles(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) RelayLogFiles(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
 
-	output, err := osagent.GetRelayLogFileNames()
+	output, err := osagent.GetRelayLogFileNames(agent.Info.MySQLDatadir, agent.Config.Common.ExecWithSudo)
 	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to find active relay logs")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -275,13 +254,14 @@ func (this *HttpAPI) RelayLogFiles(params martini.Params, r render.Render, req *
 }
 
 // RelayLogFiles returns the list of active relay logs
-func (this *HttpAPI) RelayLogEndCoordinates(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) RelayLogEndCoordinates(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
 
-	coordinates, err := osagent.GetRelayLogEndCoordinates()
+	coordinates, err := osagent.GetRelayLogEndCoordinates(agent.Info.MySQLDatadir, agent.Config.Common.ExecWithSudo)
 	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get relay log end coordinates")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -289,7 +269,7 @@ func (this *HttpAPI) RelayLogEndCoordinates(params martini.Params, r render.Rend
 }
 
 // RelaylogContentsTail returns contents of relay logs, from given position to the very last entry
-func (this *HttpAPI) RelaylogContentsTail(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) RelaylogContentsTail(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
@@ -303,7 +283,8 @@ func (this *HttpAPI) RelaylogContentsTail(params martini.Params, r render.Render
 	}
 	firstRelaylog := params["relaylog"]
 	var parseRelaylogs []string
-	if existingRelaylogs, err := osagent.GetRelayLogFileNames(); err != nil {
+	if existingRelaylogs, err := osagent.GetRelayLogFileNames(agent.Info.MySQLDatadir, agent.Config.Common.ExecWithSudo); err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to find active relay logs")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	} else {
@@ -315,7 +296,7 @@ func (this *HttpAPI) RelaylogContentsTail(params martini.Params, r render.Render
 		}
 	}
 
-	output, err := osagent.MySQLBinlogBinaryContents(parseRelaylogs, startPosition, 0)
+	output, err := osagent.MySQLBinlogBinaryContents(parseRelaylogs, startPosition, 0, agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -324,8 +305,8 @@ func (this *HttpAPI) RelaylogContentsTail(params martini.Params, r render.Render
 }
 
 // binlogContents returns contents of binary log entries
-func (this *HttpAPI) binlogContents(params martini.Params, r render.Render, req *http.Request,
-	contentsFunc func(binlogFiles []string, startPosition int64, stopPosition int64) (string, error),
+func (this *HttpAPI) binlogContents(params martini.Params, r render.Render, req *http.Request, agent *Agent,
+	contentsFunc func(binlogFiles []string, startPosition int64, stopPosition int64, ExecWithSudo bool) (string, error),
 ) {
 	if err := this.validateToken(r, req); err != nil {
 		return
@@ -346,7 +327,7 @@ func (this *HttpAPI) binlogContents(params martini.Params, r render.Render, req 
 		}
 	}
 	binlogFileNames := req.URL.Query()["binlog"]
-	output, err := osagent.MySQLBinlogContents(binlogFileNames, startPosition, stopPosition)
+	output, err := osagent.MySQLBinlogContents(binlogFileNames, startPosition, stopPosition, agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -355,17 +336,17 @@ func (this *HttpAPI) binlogContents(params martini.Params, r render.Render, req 
 }
 
 // BinlogContents returns contents of binary log entries
-func (this *HttpAPI) BinlogContents(params martini.Params, r render.Render, req *http.Request) {
-	this.binlogContents(params, r, req, osagent.MySQLBinlogContents)
+func (this *HttpAPI) BinlogContents(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	this.binlogContents(params, r, req, agent, osagent.MySQLBinlogContents)
 }
 
 // BinlogBinaryContents returns contents of binary log entries
-func (this *HttpAPI) BinlogBinaryContents(params martini.Params, r render.Render, req *http.Request) {
-	this.binlogContents(params, r, req, osagent.MySQLBinlogBinaryContents)
+func (this *HttpAPI) BinlogBinaryContents(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	this.binlogContents(params, r, req, agent, osagent.MySQLBinlogBinaryContents)
 }
 
 // ApplyRelaylogContents reads binlog contents from request's body and applies them locally
-func (this *HttpAPI) ApplyRelaylogContents(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) ApplyRelaylogContents(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
@@ -376,14 +357,259 @@ func (this *HttpAPI) ApplyRelaylogContents(params martini.Params, r render.Rende
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	err = osagent.ApplyRelaylogContents(body)
+	err = osagent.ApplyRelaylogContents(body, agent.Config.Common.ExecWithSudo, agent.Config.Mysql.SeedUser, agent.Config.Mysql.SeedPassword)
 	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to apply relay log contents")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
 	r.JSON(200, "OK")
 }
 
+// getAgent returns information about agent
+func (this *HttpAPI) getAgent(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	output := agent.GetAgentInfo()
+	r.JSON(200, output)
+}
+
+// Prepare starts prepare stage for seed
+func (this *HttpAPI) Prepare(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	var seedMethod seed.Method
+	var seedSide seed.Side
+	var ok bool
+	seedID, err := strconv.Atoi(params["seedID"])
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method undefinded"})
+		return
+	}
+	if _, ok = agent.Params.AvailiableSeedMethods[seedMethod]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method unavailiable on agent")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
+		return
+	}
+	if seedSide, ok = seed.ToSide[params["seedSide"]]; !ok {
+		agent.Logger.WithField("seedSide", params["seedSide"]).Error("Seed side undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed side undefinded"})
+		return
+	}
+	agent.Lock()
+	defer agent.Unlock()
+	agent.ActiveSeedID = seedID
+	go agent.SeedMethods[seedMethod].Prepare(seedSide)
+	r.Text(202, "Started")
+}
+
+// Backup starts Backup stage for seed
+func (this *HttpAPI) Backup(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	var seedMethod seed.Method
+	var ok bool
+	seedID, err := strconv.Atoi(params["seedID"])
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedID != agent.ActiveSeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to start backup. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start backup. SeedID not found"})
+		return
+	}
+	mysqlPort, err := strconv.Atoi(params["mysqlPort"])
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse MySQL port")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method undefinded"})
+		return
+	}
+	if _, ok = agent.Params.AvailiableSeedMethods[seedMethod]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method unavailiable on agent")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
+		return
+	}
+	seedHost := params["seedHost"]
+	go agent.SeedMethods[seedMethod].Backup(seedHost, mysqlPort)
+	r.Text(202, "Started")
+}
+
+// Restore starts Restore stage for seed
+func (this *HttpAPI) Restore(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	var seedMethod seed.Method
+	var ok bool
+	seedID, err := strconv.Atoi(params["seedID"])
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedID != agent.ActiveSeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to start restore. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start restore. SeedID not found"})
+		return
+	}
+	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method undefinded"})
+		return
+	}
+	if _, ok = agent.Params.AvailiableSeedMethods[seedMethod]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method unavailiable on agent")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
+		return
+	}
+	go agent.SeedMethods[seedMethod].Restore()
+	r.Text(202, "Started")
+}
+
+// Cleanup starts Cleanup stage for seed
+func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	var seedMethod seed.Method
+	var seedSide seed.Side
+	var ok bool
+	seedID, err := strconv.Atoi(params["seedID"])
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedID != agent.ActiveSeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to start cleanup. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start cleanup. SeedID not found"})
+		return
+	}
+	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method undefinded"})
+		return
+	}
+	if _, ok = agent.Params.AvailiableSeedMethods[seedMethod]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method unavailiable on agent")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
+		return
+	}
+	if seedSide, ok = seed.ToSide[params["seedSide"]]; !ok {
+		agent.Logger.WithField("seedSide", params["seedSide"]).Error("Seed side undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed side undefinded"})
+		return
+	}
+	go agent.SeedMethods[seedMethod].Cleanup(seedSide)
+	r.Text(202, "Started")
+}
+
+// GetMetadata returns metadata (gtidExecute or positional) for seed
+func (this *HttpAPI) GetMetadata(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	var seedMethod seed.Method
+	var ok bool
+	seedID, err := strconv.Atoi(params["seedID"])
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedID != agent.ActiveSeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to start cleanup. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start cleanup. SeedID not found"})
+		return
+	}
+	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method undefinded"})
+		return
+	}
+	if _, ok = agent.Params.AvailiableSeedMethods[seedMethod]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method unavailiable on agent")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
+		return
+	}
+	metadata, err := agent.SeedMethods[seedMethod].GetMetadata()
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get backup metadata")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, metadata)
+}
+
+// AbortSeed tries to seed process
+func (this *HttpAPI) AbortSeed(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	seedID, err := strconv.Atoi(params["seedID"])
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedID != agent.ActiveSeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to abort seed. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seedp. SeedID not found"})
+		return
+	}
+	agent.Lock()
+	defer agent.Unlock()
+	if agent.SeedStageStatus[seedID].Status != seed.Running || agent.SeedStageStatus[seedID].Command == nil {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to abort seed. Seed not running")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seedp. Seed not running"})
+		return
+	}
+	agent.SeedStageStatus[seedID].Command.Kill()
+	r.Text(200, "killed")
+}
+
+func (this *HttpAPI) SeedStatus(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	seedID, err := strconv.Atoi(params["seedID"])
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if _, ok := agent.SeedStageStatus[seedID]; !ok {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "SeedID not found"})
+		return
+	}
+	r.JSON(200, agent.SeedStageStatus[seedID])
+}
+
+// TODELETE
+func (this *HttpAPI) getAgentParams(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req); err != nil {
+		return
+	}
+	r.JSON(200, agent.Params)
+}
+
+/*
 func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
 		return
@@ -405,24 +631,22 @@ func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *htt
 	}
 }
 
-// getAgent returns information about agent
-func (this *HttpAPI) getAgent(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+// DiskUsage returns the number of bytes of a give ndirectory (recursive)
+func (this *HttpAPI) DiskUsage(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	output := agent.GetAgentInfo()
+	path := req.URL.Query().Get("path")
+
+	output, err := osagent.DiskUsage(path)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
 	r.JSON(200, output)
 }
 
-// TODELETE
-func (this *HttpAPI) getAgentParams(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
-	if err := this.validateToken(r, req); err != nil {
-		return
-	}
-	r.JSON(200, agent.Params)
-}
 
-/*
 // DeleteMySQLDataDir compeltely erases MySQL data directory. Use with care!
 func (this *HttpAPI) DeleteMySQLDataDir(params martini.Params, r render.Render, req *http.Request) {
 	if err := this.validateToken(r, req); err != nil {
@@ -632,20 +856,18 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	//m.Get("/api/seed-status", this.seedStatus)
 
 	// seed process
-	//m.Get("/api/prepare/:seedID/:seedMethod/:hostType", this.Prepare)
-	//m.Get("/api/backup/:seedId/:seedMethod/:targetHost", this.Backup)
-	//m.Get("/api/backup/:seedId/:seedMethod/:targetHost/:databases", this.Backup)
-	//m.Get("/api/receive/:seedID/:seedMethod", this.Receive)
-	//m.Get("/api/restore/:seedID/:seedMethod", this.Restore)
-	//m.Get("/api/cleanup/:seedID/:seedMethod/:hostType", this.Cleanup)
-	//m.Get("/api/get-metadata/:seedID/:seedMethod", this.GetMedatada)
-	//m.Get("/api/cancel-seed", this.cancelSeed)
+	m.Get("/api/prepare/:seedID/:seedMethod/:seedSide", this.Prepare)
+	m.Get("/api/backup/:seedID/:seedMethod/:seedHost/:mysqlPort", this.Backup)
+	m.Get("/api/restore/:seedID/:seedMethod", this.Restore)
+	m.Get("/api/cleanup/:seedID/:seedMethod/:seedSide", this.Cleanup)
+	m.Get("/api/get-metadata/:seedID/:seedMethod", this.GetMetadata)
+	m.Get("/api/abort-seed/:seedID", this.AbortSeed)
+	m.Get("/api/seed-status/:seedID", this.SeedStatus)
 
 	// ??
 	m.Get("/api/post-copy", this.PostCopy)
 	m.Get("/api/receive-mysql-seed-data/:seedId", this.ReceiveMySQLSeedData)
 	//m.Get("/api/send-mysql-seed-data/:targetHost/:seedId", this.SendMySQLSeedData)
-	m.Get("/api/abort-seed/:seedId", this.AbortSeed)
 	m.Get("/api/seed-command-completed/:seedId", this.SeedCommandCompleted)
 	m.Get("/api/seed-command-succeeded/:seedId", this.SeedCommandSucceeded)
 
@@ -680,7 +902,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Post("/api/apply-relaylog-contents", this.ApplyRelaylogContents)
 
 	// to delete
-	m.Get("/api/custom-commands/:cmd", this.RunCommand)
+	// m.Get("/api/custom-commands/:cmd", this.RunCommand)
 
 	// list all the /debug/ endpoints we want
 	m.Get("/debug/pprof", pprof.Index)

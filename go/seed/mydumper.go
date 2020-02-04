@@ -1,8 +1,6 @@
 package seed
 
 import (
-	"context"
-
 	"github.com/github/orchestrator-agent/go/helper/cmd"
 	log "github.com/sirupsen/logrus"
 )
@@ -21,29 +19,25 @@ type MydumperConfig struct {
 	Compress        bool `toml:"compress"`
 }
 
-func (sm *MydumperSeed) Prepare(ctx context.Context, side Side) error {
+func (sm *MydumperSeed) Prepare(side Side) {
 	sm.Logger.Info("This is mydumper prepare")
-	return nil
 }
 
-func (sm *MydumperSeed) Backup(ctx context.Context) error {
+func (sm *MydumperSeed) Backup(seedHost string, mysqlPort int) {
 	sm.Logger.Info("This is mydumper backup")
-	return nil
 }
 
-func (sm *MydumperSeed) Restore(ctx context.Context) error {
+func (sm *MydumperSeed) Restore() {
 	sm.Logger.Info("This is mydumper restore")
-	return nil
 }
 
-func (sm *MydumperSeed) GetMetadata(ctx context.Context) (*BackupMetadata, error) {
+func (sm *MydumperSeed) GetMetadata() (*BackupMetadata, error) {
 	sm.Logger.Info("This is mydumper metadata")
 	return &BackupMetadata{}, nil
 }
 
-func (sm *MydumperSeed) Cleanup(ctx context.Context, side Side) error {
+func (sm *MydumperSeed) Cleanup(side Side) {
 	sm.Logger.Info("This is mydumper cleanup")
-	return nil
 }
 
 func (sm *MydumperSeed) IsAvailable() bool {

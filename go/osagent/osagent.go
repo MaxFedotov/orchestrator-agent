@@ -17,20 +17,16 @@
 package osagent
 
 import (
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
-	"path"
-	"regexp"
 	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/outbrain/golib/log"
+	"gopkg.in/pipe.v2"
 )
 
 // DiskStat describes availiable disk statistic methods
@@ -49,7 +45,7 @@ const (
 	SeedTransferPort = 21234
 )
 
-var activeCommands = make(map[string]*exec.Cmd)
+var activeCommands = make(map[string]*pipe.State)
 
 func init() {
 	osPath := os.Getenv("PATH")
@@ -120,12 +116,78 @@ func GetMySQLErrorLogTail(logFile string, execWithSudo bool) ([]string, error) {
 
 /* OLD FUNCTIONS */
 
-func GetMySQLDataDir() (string, error) {
+// PostCopy executes a post-copy command -- after LVM copy is done, before service starts. Some cleanup may go here.
+func PostCopy(command string, execWithSudo bool) error {
+	return cmd.CommandRun(command, execWithSudo)
+}
+
+func MySQLStop(execWithSudo bool) error {
+	return cmd.CommandRun("systemctl stop mysqld", execWithSudo)
+}
+
+func MySQLStart(execWithSudo bool) error {
+	return cmd.CommandRun("systemctl start mysqld", execWithSudo)
+}
+
+func ReceiveMySQLSeedData(seedId string, execWithSudo bool) error {
+	directory := "/var/lib/mysql"
+
+	err := cmd.CommandRunWithFunc(
+		fmt.Sprintf("%s %s %d", config.Config.ReceiveSeedDataCommand, directory, SeedTransferPort),
+		execWithSudo,
+		func(command *pipe.State) {
+			activeCommands[seedId] = command
+			log.Debug("ReceiveMySQLSeedData command completed")
+		})
+	if err != nil {
+		return log.Errore(err)
+	}
+
+	return err
+}
+
+func SendMySQLSeedData(targetHostname string, directory string, seedId string, execWithSudo bool) error {
+	if directory == "" {
+		return log.Error("Empty directory in SendMySQLSeedData")
+	}
+	err := cmd.CommandRunWithFunc(fmt.Sprintf("%s %s %s %d", config.Config.SendSeedDataCommand, directory, targetHostname, SeedTransferPort),
+		execWithSudo,
+		func(command *pipe.State) {
+			activeCommands[seedId] = command
+			log.Debug("SendMySQLSeedData command completed")
+		})
+	if err != nil {
+		return log.Errore(err)
+	}
+	return err
+}
+
+func SeedCommandCompleted(seedId string) bool {
+	return false
+}
+
+func SeedCommandSucceeded(seedId string) bool {
+	return false
+}
+
+func AbortSeed(seedId string) error {
+	if cmd, ok := activeCommands[seedId]; ok {
+		//log.Debugf("Killing process %d", cmd.Process.Pid)
+		cmd.Kill()
+	} else {
+		log.Debug("Not killing: Process not found")
+	}
+	return nil
+}
+
+/*func GetMySQLDataDir() (string, error) {
 	command := config.Config.MySQLDatadirCommand
 	output, err := commandOutput(command)
 	return strings.TrimSpace(fmt.Sprintf("%s", output)), err
 }
+*/
 
+/*
 func GetMySQLPort() (int64, error) {
 	command := config.Config.MySQLPortCommand
 	output, err := commandOutput(command)
@@ -134,7 +196,9 @@ func GetMySQLPort() (int64, error) {
 	}
 	return strconv.ParseInt(strings.TrimSpace(fmt.Sprintf("%s", output)), 10, 0)
 }
+*/
 
+/*
 func DiskUsage(path string) (int64, error) {
 	var result int64
 
@@ -150,150 +214,9 @@ func DiskUsage(path string) (int64, error) {
 	}
 	return result, err
 }
+*/
 
-// DeleteMySQLDataDir self explanatory. Be responsible! This function does not verify the MySQL service is down
-func DeleteMySQLDataDir() error {
-
-	directory, err := GetMySQLDataDir()
-	if err != nil {
-		return err
-	}
-
-	directory = strings.TrimSpace(directory)
-	if directory == "" {
-		return errors.New("refusing to delete empty directory")
-	}
-	if path.Dir(directory) == directory {
-		return errors.New(fmt.Sprintf("Directory %s seems to be root; refusing to delete", directory))
-	}
-	_, err = commandOutput(config.Config.MySQLDeleteDatadirContentCommand)
-
-	return err
-}
-
-func GetMySQLDataDirAvailableDiskSpace() (int64, error) {
-	directory, err := GetMySQLDataDir()
-	if err != nil {
-		return 0, log.Errore(err)
-	}
-
-	output, err := commandOutput(fmt.Sprintf("df -PT -B 1 %s | sed -e /^Filesystem/d", directory))
-	if err != nil {
-		return 0, log.Errore(err)
-	}
-
-	if len(output) > 0 {
-		tokens, err := outputTokens(`[ \t]+`, output, err)
-		if err != nil {
-			return 0, log.Errore(err)
-		}
-		for _, lineTokens := range tokens {
-			result, err := strconv.ParseInt(lineTokens[4], 10, 0)
-			return result, err
-		}
-	}
-	return 0, log.Errore(errors.New(fmt.Sprintf("No rows found by df in GetMySQLDataDirAvailableDiskSpace, %s", directory)))
-}
-
-// PostCopy executes a post-copy command -- after LVM copy is done, before service starts. Some cleanup may go here.
-func PostCopy() error {
-	_, err := commandOutput(config.Config.PostCopyCommand)
-	return err
-}
-
-func HeuristicMySQLDataPath(mountPoint string) (string, error) {
-	datadir, err := GetMySQLDataDir()
-	if err != nil {
-		return "", err
-	}
-
-	heuristicFileName := "ibdata1"
-
-	re := regexp.MustCompile(`/[^/]+(.*)`)
-	for {
-		heuristicFullPath := path.Join(mountPoint, datadir, heuristicFileName)
-		log.Debugf("search for %s", heuristicFullPath)
-		if _, err := os.Stat(heuristicFullPath); err == nil {
-			return path.Join(mountPoint, datadir), nil
-		}
-		if datadir == "" {
-			return "", errors.New("Cannot detect MySQL datadir")
-		}
-		datadir = re.FindStringSubmatch(datadir)[1]
-	}
-}
-
-func MySQLStop() error {
-	_, err := commandOutput(config.Config.MySQLServiceStopCommand)
-	return err
-}
-
-func MySQLStart() error {
-	_, err := commandOutput(config.Config.MySQLServiceStartCommand)
-	return err
-}
-
-func ReceiveMySQLSeedData(seedId string) error {
-	directory, err := GetMySQLDataDir()
-	if err != nil {
-		return log.Errore(err)
-	}
-
-	err = commandRun(
-		fmt.Sprintf("%s %s %d", config.Config.ReceiveSeedDataCommand, directory, SeedTransferPort),
-		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
-			log.Debug("ReceiveMySQLSeedData command completed")
-		})
-	if err != nil {
-		return log.Errore(err)
-	}
-
-	return err
-}
-
-func SendMySQLSeedData(targetHostname string, directory string, seedId string) error {
-	if directory == "" {
-		return log.Error("Empty directory in SendMySQLSeedData")
-	}
-	err := commandRun(fmt.Sprintf("%s %s %s %d", config.Config.SendSeedDataCommand, directory, targetHostname, SeedTransferPort),
-		func(cmd *exec.Cmd) {
-			activeCommands[seedId] = cmd
-			log.Debug("SendMySQLSeedData command completed")
-		})
-	if err != nil {
-		return log.Errore(err)
-	}
-	return err
-}
-
-func SeedCommandCompleted(seedId string) bool {
-	if cmd, ok := activeCommands[seedId]; ok {
-		if cmd.ProcessState != nil {
-			return cmd.ProcessState.Exited()
-		}
-	}
-	return false
-}
-
-func SeedCommandSucceeded(seedId string) bool {
-	if cmd, ok := activeCommands[seedId]; ok {
-		if cmd.ProcessState != nil {
-			return cmd.ProcessState.Success()
-		}
-	}
-	return false
-}
-
-func AbortSeed(seedId string) error {
-	if cmd, ok := activeCommands[seedId]; ok {
-		log.Debugf("Killing process %d", cmd.Process.Pid)
-		return cmd.Process.Kill()
-	} else {
-		log.Debug("Not killing: Process not found")
-	}
-	return nil
-}
+/*
 
 func ExecCustomCmdWithOutput(commandKey string) ([]byte, error) {
 	return commandOutput(config.Config.CustomCommands[commandKey])
@@ -392,5 +315,73 @@ func AvailableSnapshots(requireLocal bool) ([]string, error) {
 	output, err := commandOutput(command)
 	hosts, err := outputLines(output, err)
 	return hosts, err
+}
+*/
+
+// DeleteMySQLDataDir self explanatory. Be responsible! This function does not verify the MySQL service is down
+/*func DeleteMySQLDataDir() error {
+
+	directory, err := GetMySQLDataDir()
+	if err != nil {
+		return err
+	}
+
+	directory = strings.TrimSpace(directory)
+	if directory == "" {
+		return errors.New("refusing to delete empty directory")
+	}
+	if path.Dir(directory) == directory {
+		return errors.New(fmt.Sprintf("Directory %s seems to be root; refusing to delete", directory))
+	}
+	_, err = commandOutput(config.Config.MySQLDeleteDatadirContentCommand)
+
+	return err
+} */
+
+/* func GetMySQLDataDirAvailableDiskSpace() (int64, error) {
+	directory, err := GetMySQLDataDir()
+	if err != nil {
+		return 0, log.Errore(err)
+	}
+
+	output, err := commandOutput(fmt.Sprintf("df -PT -B 1 %s | sed -e /^Filesystem/d", directory))
+	if err != nil {
+		return 0, log.Errore(err)
+	}
+
+	if len(output) > 0 {
+		tokens, err := outputTokens(`[ \t]+`, output, err)
+		if err != nil {
+			return 0, log.Errore(err)
+		}
+		for _, lineTokens := range tokens {
+			result, err := strconv.ParseInt(lineTokens[4], 10, 0)
+			return result, err
+		}
+	}
+	return 0, log.Errore(errors.New(fmt.Sprintf("No rows found by df in GetMySQLDataDirAvailableDiskSpace, %s", directory)))
+}
+*/
+
+/* func HeuristicMySQLDataPath(mountPoint string) (string, error) {
+	datadir, err := GetMySQLDataDir()
+	if err != nil {
+		return "", err
+	}
+
+	heuristicFileName := "ibdata1"
+
+	re := regexp.MustCompile(`/[^/]+(.*)`)
+	for {
+		heuristicFullPath := path.Join(mountPoint, datadir, heuristicFileName)
+		log.Debugf("search for %s", heuristicFullPath)
+		if _, err := os.Stat(heuristicFullPath); err == nil {
+			return path.Join(mountPoint, datadir), nil
+		}
+		if datadir == "" {
+			return "", errors.New("Cannot detect MySQL datadir")
+		}
+		datadir = re.FindStringSubmatch(datadir)[1]
+	}
 }
 */

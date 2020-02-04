@@ -1,8 +1,6 @@
 package seed
 
 import (
-	"context"
-
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/openark/golib/sqlutils"
 	log "github.com/sirupsen/logrus"
@@ -19,29 +17,25 @@ type ClonePluginConfig struct {
 	Enabled bool `toml:"enabled"`
 }
 
-func (sm *ClonePluginSeed) Prepare(ctx context.Context, side Side) error {
+func (sm *ClonePluginSeed) Prepare(side Side) {
 	sm.Logger.Info("This is clone plugin prepare")
-	return nil
 }
 
-func (sm *ClonePluginSeed) Backup(ctx context.Context) error {
+func (sm *ClonePluginSeed) Backup(seedHost string, mysqlPort int) {
 	sm.Logger.Info("This is clone plugin backup")
-	return nil
 }
 
-func (sm *ClonePluginSeed) Restore(ctx context.Context) error {
+func (sm *ClonePluginSeed) Restore() {
 	sm.Logger.Info("This is clone plugin restore")
-	return nil
 }
 
-func (sm *ClonePluginSeed) GetMetadata(ctx context.Context) (*BackupMetadata, error) {
+func (sm *ClonePluginSeed) GetMetadata() (*BackupMetadata, error) {
 	sm.Logger.Info("This is clone plugin metadata")
 	return &BackupMetadata{}, nil
 }
 
-func (sm *ClonePluginSeed) Cleanup(ctx context.Context, side Side) error {
+func (sm *ClonePluginSeed) Cleanup(side Side) {
 	sm.Logger.Info("This is clone plugin cleanup")
-	return nil
 }
 
 func (sm *ClonePluginSeed) IsAvailable() bool {

@@ -1,8 +1,6 @@
 package seed
 
 import (
-	"context"
-
 	"github.com/github/orchestrator-agent/go/helper/cmd"
 	log "github.com/sirupsen/logrus"
 )
@@ -20,29 +18,26 @@ type XtrabackupConfig struct {
 	Compress        bool `toml:"compress"`
 }
 
-func (sm *XtrabackupSeed) Prepare(ctx context.Context, side Side) error {
+func (sm *XtrabackupSeed) Prepare(side Side) {
+	// start socat to listen on target, clean datadir, stop mysql
 	sm.Logger.Info("This is xtrabackup prepare")
-	return nil
 }
 
-func (sm *XtrabackupSeed) Backup(ctx context.Context) error {
+func (sm *XtrabackupSeed) Backup(seedHost string, mysqlPort int) {
 	sm.Logger.Info("This is xtrabackup backup")
-	return nil
 }
 
-func (sm *XtrabackupSeed) Restore(ctx context.Context) error {
+func (sm *XtrabackupSeed) Restore() {
 	sm.Logger.Info("This is xtrabackup restore")
-	return nil
 }
 
-func (sm *XtrabackupSeed) GetMetadata(ctx context.Context) (*BackupMetadata, error) {
+func (sm *XtrabackupSeed) GetMetadata() (*BackupMetadata, error) {
 	sm.Logger.Info("This is xtrabackup metadata")
 	return &BackupMetadata{}, nil
 }
 
-func (sm *XtrabackupSeed) Cleanup(ctx context.Context, side Side) error {
+func (sm *XtrabackupSeed) Cleanup(side Side) {
 	sm.Logger.Info("This is xtrabackup cleanup")
-	return nil
 }
 
 func (sm *XtrabackupSeed) IsAvailable() bool {
