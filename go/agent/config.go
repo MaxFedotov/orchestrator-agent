@@ -28,7 +28,6 @@ type commonConfig struct {
 	TokenHTTPHeader       string           `toml:"token-http-header"`
 	ExecWithSudo          bool             `toml:"exec-with-sudo"`
 	BackupDir             string           `toml:"backup-dir"`
-	BackupOldDatadir      bool             `toml:"backup-old-datadir"`
 	PostSeedCommand       string           `toml:"post-seed-command"`
 	StatusEndpoint        string           `toml:"status-endpoint"`
 }
@@ -93,7 +92,6 @@ func NewConfig() *Config {
 			TokenHTTPHeader:   "",
 			ExecWithSudo:      false,
 			BackupDir:         "",
-			BackupOldDatadir:  false,
 			PostSeedCommand:   "",
 			StatusEndpoint:    "/api/status",
 		},

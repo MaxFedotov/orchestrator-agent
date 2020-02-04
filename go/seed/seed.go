@@ -69,19 +69,18 @@ type Plugin interface {
 }
 
 type Base struct {
-	MySQLClient      *mysql.MySQLClient
-	MySQLPort        int
-	SeedUser         string
-	SeedPassword     string
-	ExecWithSudo     bool
-	SeedPort         int
-	UseSSL           bool
-	SSLSkipVerify    bool
-	SSLCertFile      string
-	SSLCAFile        string
-	BackupDir        string
-	BackupOldDatadir bool
-	StatusChan       chan *StageStatus
+	MySQLClient   *mysql.MySQLClient
+	MySQLPort     int
+	SeedUser      string
+	SeedPassword  string
+	ExecWithSudo  bool
+	SeedPort      int
+	UseSSL        bool
+	SSLSkipVerify bool
+	SSLCertFile   string
+	SSLCAFile     string
+	BackupDir     string
+	StatusChan    chan *StageStatus
 }
 
 type MethodOpts struct {
