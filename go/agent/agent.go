@@ -220,13 +220,9 @@ func (agent *Agent) Start() error {
 	seedStageStatus := make(map[int]*seed.StageStatus)
 	agent.SeedStageStatus = seedStageStatus
 	if agent.Config.LVM.Enabled {
-		lvmOpts := seed.MethodOpts{
-			BackupSide: seed.Source,
-		}
-		lvm, err := seed.New(
+		lvm, lvmOpts, err := seed.New(
 			seed.LVM,
 			&seedBaseConfig,
-			&lvmOpts,
 			log.WithFields(log.Fields{"prefix": "LVM"}),
 			agent.Config.LVM,
 		)
@@ -234,18 +230,14 @@ func (agent *Agent) Start() error {
 			agent.Logger.WithField("error", err).Fatal("Unable to use LVM seed method")
 		} else {
 			seedMethods[seed.LVM] = lvm
-			availiableSeedMethods[seed.LVM] = &lvmOpts
+			availiableSeedMethods[seed.LVM] = lvmOpts
 			agent.Logger.Info("LVM seed method initialized")
 		}
 	}
 	if agent.Config.Xtrabackup.Enabled {
-		xtrabackupOpts := seed.MethodOpts{
-			BackupSide: seed.Source,
-		}
-		xtrabackup, err := seed.New(
+		xtrabackup, xtrabackupOpts, err := seed.New(
 			seed.Xtrabackup,
 			&seedBaseConfig,
-			&xtrabackupOpts,
 			log.WithFields(log.Fields{"prefix": "XTRABACKUP"}),
 			agent.Config.Xtrabackup,
 		)
@@ -253,18 +245,14 @@ func (agent *Agent) Start() error {
 			agent.Logger.WithField("error", err).Fatal("Unable to use Xtrabackup seed method")
 		} else {
 			seedMethods[seed.Xtrabackup] = xtrabackup
-			availiableSeedMethods[seed.Xtrabackup] = &xtrabackupOpts
+			availiableSeedMethods[seed.Xtrabackup] = xtrabackupOpts
 			agent.Logger.Info("Xtrabackup seed method initialized")
 		}
 	}
 	if agent.Config.ClonePlugin.Enabled {
-		clonePluginOpts := seed.MethodOpts{
-			BackupSide: seed.Source,
-		}
-		clonePlugin, err := seed.New(
+		clonePlugin, clonePluginOpts, err := seed.New(
 			seed.ClonePlugin,
 			&seedBaseConfig,
-			&clonePluginOpts,
 			log.WithFields(log.Fields{"prefix": "CLONE PLUGIN"}),
 			agent.Config.ClonePlugin,
 		)
@@ -272,18 +260,14 @@ func (agent *Agent) Start() error {
 			agent.Logger.WithField("error", err).Fatal("Unable to use Clone plugin seed method")
 		} else {
 			seedMethods[seed.ClonePlugin] = clonePlugin
-			availiableSeedMethods[seed.ClonePlugin] = &clonePluginOpts
+			availiableSeedMethods[seed.ClonePlugin] = clonePluginOpts
 			agent.Logger.Info("Clone plugin seed method initialized")
 		}
 	}
 	if agent.Config.MysqlDump.Enabled {
-		mysqldumpOpts := seed.MethodOpts{
-			BackupSide: seed.Target,
-		}
-		mysqldump, err := seed.New(
+		mysqldump, mysqldumpOpts, err := seed.New(
 			seed.Mysqldump,
 			&seedBaseConfig,
-			&mysqldumpOpts,
 			log.WithFields(log.Fields{"prefix": "MYSQLDUMP"}),
 			agent.Config.MysqlDump,
 		)
@@ -291,18 +275,14 @@ func (agent *Agent) Start() error {
 			agent.Logger.WithField("error", err).Fatal("Unable to use Mysqldump seed method")
 		} else {
 			seedMethods[seed.Mysqldump] = mysqldump
-			availiableSeedMethods[seed.Mysqldump] = &mysqldumpOpts
+			availiableSeedMethods[seed.Mysqldump] = mysqldumpOpts
 			agent.Logger.Info("Mysqldump seed method initialized")
 		}
 	}
 	if agent.Config.Mydumper.Enabled {
-		mydumperOpts := seed.MethodOpts{
-			BackupSide: seed.Target,
-		}
-		mydumper, err := seed.New(
+		mydumper, mydumperOpts, err := seed.New(
 			seed.Mydumper,
 			&seedBaseConfig,
-			&mydumperOpts,
 			log.WithFields(log.Fields{"prefix": "MYDUMPER"}),
 			agent.Config.Mydumper,
 		)
@@ -310,7 +290,7 @@ func (agent *Agent) Start() error {
 			agent.Logger.WithField("error", err).Fatal("Unable to use Mydumper seed method")
 		} else {
 			seedMethods[seed.Mydumper] = mydumper
-			availiableSeedMethods[seed.Mydumper] = &mydumperOpts
+			availiableSeedMethods[seed.Mydumper] = mydumperOpts
 			agent.Logger.Info("Mydumper seed method initialized")
 		}
 	}
@@ -326,7 +306,9 @@ func (agent *Agent) UpdateSeedStatus() {
 	for {
 		select {
 		case seedStatus := <-agent.StatusChan:
+			agent.Lock()
 			agent.SeedStageStatus[agent.ActiveSeedID] = seedStatus
+			agent.Unlock()
 		}
 	}
 }

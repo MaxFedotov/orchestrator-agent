@@ -26,7 +26,7 @@ import (
 
 // MySQLDatabase describes a MySQL database
 type MySQLDatabase struct {
-	Engines []string
+	Engines []mysql.Engine
 	Size    int64
 }
 
@@ -51,10 +51,10 @@ func getDatabases(m *mysql.MySQLClient) (databases []string, err error) {
 	return databases, err
 }
 
-func getEngines(m *mysql.MySQLClient, dbname string) (engines []string, err error) {
+func getEngines(m *mysql.MySQLClient, dbname string) (engines []mysql.Engine, err error) {
 	query := `SELECT engine FROM information_schema.tables where TABLE_SCHEMA = ? and table_type = 'BASE TABLE' GROUP BY engine;`
 	err = mysql.QueryData(m.Conn, query, sqlutils.Args(dbname), func(m sqlutils.RowMap) error {
-		engine := m.GetString("engine")
+		engine := mysql.ToEngine[m.GetString("engine")]
 		engines = append(engines, engine)
 		return nil
 	})

@@ -60,6 +60,22 @@ func CommandOutput(commandText string, execWithSudo bool) ([]byte, error) {
 	return outputBytes, err
 }
 
+// CommandOutput executes a command and return output bytes (stderr and stdout)
+func CommandCombinedOutput(commandText string, execWithSudo bool) ([]byte, error) {
+	logger.WithFields(log.Fields{"cmd": commandText}).Debug("Executing command")
+	commands := []pipe.Pipe{}
+	commandsTextSplitted := strings.Split(commandText, ">")
+	for _, cmd := range strings.Split(commandsTextSplitted[0], "|") {
+		commands = append(commands, execCmd(string(strings.TrimSpace(cmd)), execWithSudo))
+	}
+	if len(commandsTextSplitted) > 1 {
+		commands = append(commands, pipe.AppendFile(strings.TrimSpace(commandsTextSplitted[1]), 0644))
+	}
+	p := pipe.Line(commands...)
+	outputBytes, err := pipe.CombinedOutput(p)
+	return outputBytes, err
+}
+
 // CommandRun executes a command
 func CommandRun(commandText string, execWithSudo bool) error {
 	logger.WithFields(log.Fields{"cmd": commandText}).Debug("Executing command")

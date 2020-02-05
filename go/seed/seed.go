@@ -65,7 +65,8 @@ type Plugin interface {
 	Restore()
 	GetMetadata() (*BackupMetadata, error)
 	Cleanup(side Side)
-	IsAvailable() bool
+	isAvailable() bool
+	getSupportedEngines() []mysql.Engine
 }
 
 type Base struct {
@@ -84,7 +85,8 @@ type Base struct {
 }
 
 type MethodOpts struct {
-	BackupSide Side
+	BackupSide       Side
+	SupportedEngines []mysql.Engine
 }
 
 type BackupMetadata struct {
@@ -94,81 +96,91 @@ type BackupMetadata struct {
 }
 
 // New creates seed plugin
-func New(seedMethod Method, baseConfig *Base, methodOpts *MethodOpts, logger *log.Entry, seedMethodConfig interface{}) (Plugin, error) {
+func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfig interface{}) (Plugin, *MethodOpts, error) {
 	if seedMethod == LVM {
 		if conf, ok := seedMethodConfig.(*LVMConfig); ok {
 			sm := &LVMSeed{
 				Base:       baseConfig,
-				MethodOpts: methodOpts,
+				MethodOpts: &MethodOpts{},
 				Config:     conf,
 				Logger:     logger,
 			}
-			if sm.IsAvailable() {
-				return sm, nil
+			if sm.isAvailable() {
+				sm.MethodOpts.BackupSide = Source
+				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				return sm, sm.MethodOpts, nil
 			}
-			return nil, fmt.Errorf("LVM seed method unavailable")
+			return nil, nil, fmt.Errorf("LVM seed method unavailable")
 		}
-		return nil, fmt.Errorf("unable to parse LVM config")
+		return nil, nil, fmt.Errorf("unable to parse LVM config")
 	}
 	if seedMethod == Xtrabackup {
 		if conf, ok := seedMethodConfig.(*XtrabackupConfig); ok {
 			sm := &XtrabackupSeed{
 				Base:       baseConfig,
-				MethodOpts: methodOpts,
+				MethodOpts: &MethodOpts{},
 				Config:     conf,
 				Logger:     logger,
 			}
-			if sm.IsAvailable() {
-				return sm, nil
+			if sm.isAvailable() {
+				sm.MethodOpts.BackupSide = Source
+				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				return sm, sm.MethodOpts, nil
 			}
-			return nil, fmt.Errorf("Xtrabackup seed method unavailable")
+			return nil, nil, fmt.Errorf("Xtrabackup seed method unavailable")
 		}
-		return nil, fmt.Errorf("unable to parse Xtrabackup config")
+		return nil, nil, fmt.Errorf("unable to parse Xtrabackup config")
 	}
 	if seedMethod == ClonePlugin {
 		if conf, ok := seedMethodConfig.(*ClonePluginConfig); ok {
 			sm := &ClonePluginSeed{
 				Base:       baseConfig,
-				MethodOpts: methodOpts,
+				MethodOpts: &MethodOpts{},
 				Config:     conf,
 				Logger:     logger,
 			}
-			if sm.IsAvailable() {
-				return sm, nil
+			if sm.isAvailable() {
+				sm.MethodOpts.BackupSide = Target
+				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				return sm, sm.MethodOpts, nil
 			}
-			return nil, fmt.Errorf("Clone plugin seed method unavailable")
+			return nil, nil, fmt.Errorf("Clone plugin seed method unavailable")
 		}
-		return nil, fmt.Errorf("unable to parse Clone plugin config")
+		return nil, nil, fmt.Errorf("unable to parse Clone plugin config")
 	}
 	if seedMethod == Mydumper {
 		if conf, ok := seedMethodConfig.(*MydumperConfig); ok {
 			sm := &MydumperSeed{
 				Base:       baseConfig,
-				MethodOpts: methodOpts,
+				MethodOpts: &MethodOpts{},
 				Config:     conf,
 				Logger:     logger,
 			}
-			if sm.IsAvailable() {
-				return sm, nil
+			if sm.isAvailable() {
+				sm.MethodOpts.BackupSide = Target
+				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				return sm, sm.MethodOpts, nil
 			}
-			return nil, fmt.Errorf("Mydumper seed method unavailable")
+			return nil, nil, fmt.Errorf("Mydumper seed method unavailable")
 		}
-		return nil, fmt.Errorf("unable to parse Mydumper config")
+		return nil, nil, fmt.Errorf("unable to parse Mydumper config")
 	}
 	if seedMethod == Mysqldump {
 		if conf, ok := seedMethodConfig.(*MysqldumpConfig); ok {
 			sm := &MysqldumpSeed{
 				Base:       baseConfig,
-				MethodOpts: methodOpts,
+				MethodOpts: &MethodOpts{},
 				Config:     conf,
 				Logger:     logger,
 			}
-			if sm.IsAvailable() {
-				return sm, nil
+			if sm.isAvailable() {
+				sm.MethodOpts.BackupSide = Target
+				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				return sm, sm.MethodOpts, nil
 			}
-			return nil, fmt.Errorf("Mysqldump seed method unavailable")
+			return nil, nil, fmt.Errorf("Mysqldump seed method unavailable")
 		}
-		return nil, fmt.Errorf("unable to parse Mysqldump config")
+		return nil, nil, fmt.Errorf("unable to parse Mysqldump config")
 	}
-	return nil, fmt.Errorf("unknown seed method")
+	return nil, nil, fmt.Errorf("unknown seed method")
 }

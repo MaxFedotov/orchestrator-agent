@@ -1,12 +1,53 @@
 package mysql
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 
 	"github.com/openark/golib/sqlutils"
 	log "github.com/sirupsen/logrus"
 )
+
+type Engine int
+
+const (
+	ROCKSDB Engine = iota
+	MRG_MYISAM
+	CSV
+	BLACKHOLE
+	InnoDB
+	MEMORY
+	ARCHIVE
+	MyISAM
+	FEDERATED
+	TokuDB
+)
+
+func (e Engine) String() string {
+	return [...]string{"ROCKSDB", "MRG_MYISAM", "CSV", "BLACKHOLE", "InnoDB", "MEMORY", "ARCHIVE", "MyISAM", "FEDERATED", "TokuDB"}[e]
+}
+
+// MarshalJSON marshals the enum as a quoted json string
+func (e Engine) MarshalJSON() ([]byte, error) {
+	buffer := bytes.NewBufferString(`"`)
+	buffer.WriteString(e.String())
+	buffer.WriteString(`"`)
+	return buffer.Bytes(), nil
+}
+
+var ToEngine = map[string]Engine{
+	"ROCKSDB":    ROCKSDB,
+	"MRG_MYISAM": MRG_MYISAM,
+	"CSV":        CSV,
+	"BLACKHOLE":  BLACKHOLE,
+	"InnoDB":     InnoDB,
+	"MEMORY":     MEMORY,
+	"ARCHIVE":    ARCHIVE,
+	"MyISAM":     MyISAM,
+	"FEDERATED":  FEDERATED,
+	"TokuDB":     TokuDB,
+}
 
 var logger = log.WithFields(log.Fields{"prefix": "MYSQL"})
 

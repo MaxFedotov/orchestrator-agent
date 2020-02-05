@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/github/orchestrator-agent/go/helper/cmd"
+	"github.com/github/orchestrator-agent/go/helper/mysql"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/pipe.v2"
 )
@@ -113,10 +114,14 @@ func (sm *MysqldumpSeed) Cleanup(side Side) {
 	stage.UpdateSeedStatus(Completed, nil, "Stage completed")
 }
 
-func (sm *MysqldumpSeed) IsAvailable() bool {
+func (sm *MysqldumpSeed) isAvailable() bool {
 	err := cmd.CommandRun("mysqldump --version", sm.ExecWithSudo)
 	if err != nil {
 		return false
 	}
 	return true
+}
+
+func (sm *MysqldumpSeed) getSupportedEngines() []mysql.Engine {
+	return []mysql.Engine{mysql.ROCKSDB, mysql.MRG_MYISAM, mysql.CSV, mysql.BLACKHOLE, mysql.InnoDB, mysql.MEMORY, mysql.ARCHIVE, mysql.MyISAM, mysql.FEDERATED, mysql.TokuDB}
 }

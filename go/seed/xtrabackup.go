@@ -1,7 +1,11 @@
 package seed
 
 import (
+	"regexp"
+	"strconv"
+
 	"github.com/github/orchestrator-agent/go/helper/cmd"
+	"github.com/github/orchestrator-agent/go/helper/mysql"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -40,10 +44,22 @@ func (sm *XtrabackupSeed) Cleanup(side Side) {
 	sm.Logger.Info("This is xtrabackup cleanup")
 }
 
-func (sm *XtrabackupSeed) IsAvailable() bool {
+func (sm *XtrabackupSeed) isAvailable() bool {
 	err := cmd.CommandRun("xtrabackup --version", sm.ExecWithSudo)
 	if err != nil {
 		return false
 	}
 	return true
+}
+
+func (sm *XtrabackupSeed) getSupportedEngines() []mysql.Engine {
+	output, _ := cmd.CommandCombinedOutput("xtrabackup --version", sm.ExecWithSudo)
+	xtrabackupVersionString := string(output)
+	re := regexp.MustCompile(`version\s*(\d+)`)
+	res := re.FindStringSubmatch(xtrabackupVersionString)[1]
+	xtrabackupVersion, _ := strconv.Atoi(res)
+	if xtrabackupVersion < 8 {
+		return []mysql.Engine{mysql.MRG_MYISAM, mysql.CSV, mysql.BLACKHOLE, mysql.InnoDB, mysql.MEMORY, mysql.ARCHIVE, mysql.MyISAM, mysql.FEDERATED}
+	}
+	return []mysql.Engine{mysql.ROCKSDB, mysql.MRG_MYISAM, mysql.CSV, mysql.BLACKHOLE, mysql.InnoDB, mysql.MEMORY, mysql.ARCHIVE, mysql.MyISAM, mysql.FEDERATED}
 }

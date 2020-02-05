@@ -38,7 +38,7 @@ func (sm *ClonePluginSeed) Cleanup(side Side) {
 	sm.Logger.Info("This is clone plugin cleanup")
 }
 
-func (sm *ClonePluginSeed) IsAvailable() bool {
+func (sm *ClonePluginSeed) isAvailable() bool {
 	installed, err := getPluginStatus(sm.MySQLClient, "clone")
 	if err != nil {
 		return false
@@ -58,4 +58,8 @@ func getPluginStatus(m *mysql.MySQLClient, pluginName string) (installed bool, e
 		return true, err
 	}
 	return false, err
+}
+
+func (sm *ClonePluginSeed) getSupportedEngines() []mysql.Engine {
+	return []mysql.Engine{mysql.InnoDB}
 }

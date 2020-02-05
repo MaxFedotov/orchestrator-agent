@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/github/orchestrator-agent/go/helper/cmd"
+	"github.com/github/orchestrator-agent/go/helper/mysql"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -44,10 +45,14 @@ func (sm *LVMSeed) Cleanup(side Side) {
 	sm.Logger.Info("This is LVM cleanup")
 }
 
-func (sm *LVMSeed) IsAvailable() bool {
+func (sm *LVMSeed) isAvailable() bool {
 	err := cmd.CommandRun(fmt.Sprintf("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent,time --sort -time %s", sm.Config.SnapshotVolumesFilter), sm.ExecWithSudo)
 	if err != nil {
 		return false
 	}
 	return true
+}
+
+func (sm *LVMSeed) getSupportedEngines() []mysql.Engine {
+	return []mysql.Engine{mysql.ROCKSDB, mysql.MRG_MYISAM, mysql.CSV, mysql.BLACKHOLE, mysql.InnoDB, mysql.MEMORY, mysql.ARCHIVE, mysql.MyISAM, mysql.FEDERATED, mysql.TokuDB}
 }
