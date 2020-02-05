@@ -67,6 +67,7 @@ type Plugin interface {
 	Cleanup(side Side)
 	isAvailable() bool
 	getSupportedEngines() []mysql.Engine
+	backupToDatadir() bool
 }
 
 type Base struct {
@@ -87,6 +88,7 @@ type Base struct {
 type MethodOpts struct {
 	BackupSide       Side
 	SupportedEngines []mysql.Engine
+	BackupToDatadir  bool
 }
 
 type BackupMetadata struct {
@@ -108,6 +110,7 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 			if sm.isAvailable() {
 				sm.MethodOpts.BackupSide = Source
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("LVM seed method unavailable")
@@ -125,6 +128,7 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 			if sm.isAvailable() {
 				sm.MethodOpts.BackupSide = Source
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("Xtrabackup seed method unavailable")
@@ -142,6 +146,7 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 			if sm.isAvailable() {
 				sm.MethodOpts.BackupSide = Target
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("Clone plugin seed method unavailable")
@@ -159,6 +164,7 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 			if sm.isAvailable() {
 				sm.MethodOpts.BackupSide = Target
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("Mydumper seed method unavailable")
@@ -176,6 +182,7 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 			if sm.isAvailable() {
 				sm.MethodOpts.BackupSide = Target
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
+				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("Mysqldump seed method unavailable")

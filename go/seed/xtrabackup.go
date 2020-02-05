@@ -63,3 +63,7 @@ func (sm *XtrabackupSeed) getSupportedEngines() []mysql.Engine {
 	}
 	return []mysql.Engine{mysql.ROCKSDB, mysql.MRG_MYISAM, mysql.CSV, mysql.BLACKHOLE, mysql.InnoDB, mysql.MEMORY, mysql.ARCHIVE, mysql.MyISAM, mysql.FEDERATED}
 }
+
+func (sm *XtrabackupSeed) backupToDatadir() bool {
+	return true
+}

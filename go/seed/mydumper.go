@@ -52,3 +52,7 @@ func (sm *MydumperSeed) isAvailable() bool {
 func (sm *MydumperSeed) getSupportedEngines() []mysql.Engine {
 	return []mysql.Engine{mysql.ROCKSDB, mysql.MRG_MYISAM, mysql.CSV, mysql.BLACKHOLE, mysql.InnoDB, mysql.MEMORY, mysql.ARCHIVE, mysql.MyISAM, mysql.FEDERATED, mysql.TokuDB}
 }
+
+func (sm *MydumperSeed) backupToDatadir() bool {
+	return false
+}

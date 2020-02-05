@@ -63,3 +63,7 @@ func getPluginStatus(m *mysql.MySQLClient, pluginName string) (installed bool, e
 func (sm *ClonePluginSeed) getSupportedEngines() []mysql.Engine {
 	return []mysql.Engine{mysql.InnoDB}
 }
+
+func (sm *ClonePluginSeed) backupToDatadir() bool {
+	return true
+}

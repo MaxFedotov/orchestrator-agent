@@ -125,3 +125,7 @@ func (sm *MysqldumpSeed) isAvailable() bool {
 func (sm *MysqldumpSeed) getSupportedEngines() []mysql.Engine {
 	return []mysql.Engine{mysql.ROCKSDB, mysql.MRG_MYISAM, mysql.CSV, mysql.BLACKHOLE, mysql.InnoDB, mysql.MEMORY, mysql.ARCHIVE, mysql.MyISAM, mysql.FEDERATED, mysql.TokuDB}
 }
+
+func (sm *MysqldumpSeed) backupToDatadir() bool {
+	return false
+}

@@ -56,3 +56,7 @@ func (sm *LVMSeed) isAvailable() bool {
 func (sm *LVMSeed) getSupportedEngines() []mysql.Engine {
 	return []mysql.Engine{mysql.ROCKSDB, mysql.MRG_MYISAM, mysql.CSV, mysql.BLACKHOLE, mysql.InnoDB, mysql.MEMORY, mysql.ARCHIVE, mysql.MyISAM, mysql.FEDERATED, mysql.TokuDB}
 }
+
+func (sm *LVMSeed) backupToDatadir() bool {
+	return true
+}
