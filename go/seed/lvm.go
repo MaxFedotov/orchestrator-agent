@@ -36,9 +36,9 @@ func (sm *LVMSeed) Restore() {
 	sm.Logger.Info("This is LVM restore")
 }
 
-func (sm *LVMSeed) GetMetadata() (*BackupMetadata, error) {
+func (sm *LVMSeed) GetMetadata() (*SeedMetadata, error) {
 	sm.Logger.Info("This is LVM metadata")
-	return &BackupMetadata{}, nil
+	return &SeedMetadata{}, nil
 }
 
 func (sm *LVMSeed) Cleanup(side Side) {

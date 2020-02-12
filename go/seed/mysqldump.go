@@ -72,8 +72,8 @@ func (sm *MysqldumpSeed) Restore() {
 	stage.UpdateSeedStatus(Completed, nil, "Stage completed")
 }
 
-func (sm *MysqldumpSeed) GetMetadata() (*BackupMetadata, error) {
-	meta := &BackupMetadata{}
+func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
+	meta := &SeedMetadata{}
 	file, err := os.Open(path.Join(sm.BackupDir, mysqlbackupFileName))
 	if err != nil {
 		return meta, err

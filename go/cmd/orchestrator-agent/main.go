@@ -81,7 +81,7 @@ func main() {
 		config.Read("/etc/orchestrator-agent.conf.json", "conf/orchestrator-agent.conf.json", "orchestrator-agent.conf.json")
 	}
 
-	defaultLogger.WithField("token", app.Params.Token).Info("Process token generated")
+	defaultLogger.WithField("token", app.Info.Token).Info("Process token generated")
 
 	acceptSignal()
 

@@ -32,9 +32,9 @@ func (sm *MydumperSeed) Restore() {
 	sm.Logger.Info("This is mydumper restore")
 }
 
-func (sm *MydumperSeed) GetMetadata() (*BackupMetadata, error) {
+func (sm *MydumperSeed) GetMetadata() (*SeedMetadata, error) {
 	sm.Logger.Info("This is mydumper metadata")
-	return &BackupMetadata{}, nil
+	return &SeedMetadata{}, nil
 }
 
 func (sm *MydumperSeed) Cleanup(side Side) {

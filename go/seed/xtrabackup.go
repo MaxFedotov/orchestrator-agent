@@ -35,9 +35,9 @@ func (sm *XtrabackupSeed) Restore() {
 	sm.Logger.Info("This is xtrabackup restore")
 }
 
-func (sm *XtrabackupSeed) GetMetadata() (*BackupMetadata, error) {
+func (sm *XtrabackupSeed) GetMetadata() (*SeedMetadata, error) {
 	sm.Logger.Info("This is xtrabackup metadata")
-	return &BackupMetadata{}, nil
+	return &SeedMetadata{}, nil
 }
 
 func (sm *XtrabackupSeed) Cleanup(side Side) {

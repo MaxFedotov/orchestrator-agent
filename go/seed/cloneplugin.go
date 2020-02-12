@@ -29,9 +29,9 @@ func (sm *ClonePluginSeed) Restore() {
 	sm.Logger.Info("This is clone plugin restore")
 }
 
-func (sm *ClonePluginSeed) GetMetadata() (*BackupMetadata, error) {
+func (sm *ClonePluginSeed) GetMetadata() (*SeedMetadata, error) {
 	sm.Logger.Info("This is clone plugin metadata")
-	return &BackupMetadata{}, nil
+	return &SeedMetadata{}, nil
 }
 
 func (sm *ClonePluginSeed) Cleanup(side Side) {

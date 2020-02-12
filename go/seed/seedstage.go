@@ -2,6 +2,7 @@ package seed
 
 import (
 	"bytes"
+	"os"
 	"time"
 
 	"gopkg.in/pipe.v2"
@@ -13,11 +14,12 @@ const (
 	Prepare Stage = iota
 	Backup
 	Restore
+	GetMetadata
 	Cleanup
 )
 
 func (s Stage) String() string {
-	return [...]string{"Prepare", "Backup", "Restore", "Cleanup"}[s]
+	return [...]string{"Prepare", "Backup", "Restore", "GetMetadata", "Cleanup"}[s]
 }
 
 func (s Stage) MarshalJSON() ([]byte, error) {
@@ -46,29 +48,32 @@ func (s Status) MarshalJSON() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-type StageStatus struct {
+type SeedStageState struct {
 	Stage      Stage
-	StartedAt  time.Time
+	Hostname   string
+	Timestamp  time.Time
 	Status     Status
 	Details    string
-	Command    *pipe.State       `json:"-"`
-	StatusChan chan *StageStatus `json:"-"`
+	Command    *pipe.State          `json:"-"`
+	StatusChan chan *SeedStageState `json:"-"`
 }
 
-func NewSeedStage(stage Stage, statusChan chan *StageStatus) *StageStatus {
-	seedStage := &StageStatus{
+func NewSeedStage(stage Stage, statusChan chan *SeedStageState) *SeedStageState {
+	seedStageState := &SeedStageState{
 		Stage:      stage,
-		StartedAt:  time.Now(),
+		Timestamp:  time.Now(),
 		Status:     Running,
 		StatusChan: statusChan,
 	}
-	seedStage.StatusChan <- seedStage
-	return seedStage
+	seedStageState.Hostname, _ = os.Hostname()
+	seedStageState.StatusChan <- seedStageState
+	return seedStageState
 }
 
-func (s *StageStatus) UpdateSeedStatus(status Status, command *pipe.State, details string) {
+func (s *SeedStageState) UpdateSeedStatus(status Status, command *pipe.State, details string) {
 	s.Status = status
 	s.Command = command
 	s.Details = details
+	s.Timestamp = time.Now()
 	s.StatusChan <- s
 }

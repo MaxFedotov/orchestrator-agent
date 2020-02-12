@@ -43,43 +43,43 @@ import (
 )
 
 type Agent struct {
-	Params          *AgentParams
-	Info            *AgentInfo
-	Config          *Config
-	ConfigFileName  string
-	HTTPClient      *nethttp.Client
-	MySQLClient     *mysql.MySQLClient
-	LastTalkback    time.Time
-	Logger          *log.Entry
-	StatusChan      chan *seed.StageStatus
-	SeedMethods     map[seed.Method]seed.Plugin
-	SeedStageStatus map[int]*seed.StageStatus
-	ActiveSeedID    int
+	Info                  *Info
+	AvailiableSeedMethods map[seed.Method]*seed.MethodOpts
+	MySQLDatadir          string
+	Config                *Config
+	ConfigFileName        string
+	HTTPClient            *nethttp.Client
+	MySQLClient           *mysql.MySQLClient
+	LastTalkback          time.Time
+	Logger                *log.Entry
+	StatusChan            chan *seed.SeedStageState
+	SeedMethods           map[seed.Method]seed.Plugin
+	SeedStageStatus       map[int]*seed.SeedStageState
+	ActiveSeedID          int
 	sync.RWMutex
 }
 
-type AgentParams struct {
-	Hostname              string
-	Port                  int
-	Token                 string
-	MySQLPort             int
-	AvailiableSeedMethods map[seed.Method]*seed.MethodOpts
+type Info struct {
+	Hostname  string
+	Port      int
+	Token     string
+	MySQLPort int
 }
 
-type AgentInfo struct {
-	LocalSnapshotsHosts  []string                 // AvailableLocalSnapshots in Orchestrator
-	SnaphostHosts        []string                 // AvailableSnapshots in Orchestrator
-	LogicalVolumes       []*osagent.LogicalVolume // pass by reference ??
-	MountPoint           *osagent.Mount           // pass by reference ??
-	BackupDir            string
-	BackupDirDiskFree    int64
-	MySQLRunning         bool
-	MySQLDatadir         string
-	MySQLDatadirDiskUsed int64
-	MySQLDatadirDiskFree int64
-	MySQLVersion         string
-	MySQLDatabases       map[string]*dbagent.MySQLDatabase
-	MySQLErrorLogTail    []string
+type Data struct {
+	LocalSnapshotsHosts   []string                 // AvailableLocalSnapshots in Orchestrator
+	SnaphostHosts         []string                 // AvailableSnapshots in Orchestrator
+	LogicalVolumes        []*osagent.LogicalVolume // pass by reference ??
+	MountPoint            *osagent.Mount           // pass by reference ??
+	BackupDir             string
+	BackupDirDiskFree     int64
+	MySQLRunning          bool
+	MySQLDatadir          string
+	MySQLDatadirDiskUsed  int64
+	MySQLDatadirDiskFree  int64
+	MySQLVersion          string
+	MySQLDatabases        map[string]*dbagent.MySQLDatabase
+	AvailiableSeedMethods map[seed.Method]*seed.MethodOpts
 }
 
 // New creates new instance of orchestrator-agent
@@ -172,7 +172,7 @@ func (agent *Agent) parseConfig() error {
 	}
 	if cfg.Common.TokenHintFile != "" {
 		agent.Logger.WithField("TokenHintFile", cfg.Common.TokenHintFile).Debug("Writing token to file")
-		err := ioutil.WriteFile(cfg.Common.TokenHintFile, []byte(agent.Params.Token), 0644)
+		err := ioutil.WriteFile(cfg.Common.TokenHintFile, []byte(agent.Info.Token), 0644)
 		agent.Logger.WithField("error", err).Error("Unable to create token hint file")
 	}
 	agent.Config = cfg
@@ -188,7 +188,7 @@ func (agent *Agent) Start() error {
 	if err != nil {
 		return fmt.Errorf("Unable to get hostname: %+v", err)
 	}
-	agent.Params = &AgentParams{
+	agent.Info = &Info{
 		Hostname:  hostname,
 		Port:      agent.Config.Common.Port,
 		Token:     token.ProcessToken.Hash,
@@ -200,7 +200,7 @@ func (agent *Agent) Start() error {
 	if err != nil {
 		return fmt.Errorf("Unable to connect to MySQL: %+v", err)
 	}
-	agent.StatusChan = make(chan *seed.StageStatus)
+	agent.StatusChan = make(chan *seed.SeedStageState)
 	seedBaseConfig := seed.Base{
 		MySQLClient:   agent.MySQLClient,
 		MySQLPort:     agent.Config.Mysql.Port,
@@ -217,7 +217,7 @@ func (agent *Agent) Start() error {
 	}
 	seedMethods := make(map[seed.Method]seed.Plugin)
 	availiableSeedMethods := make(map[seed.Method]*seed.MethodOpts)
-	seedStageStatus := make(map[int]*seed.StageStatus)
+	seedStageStatus := make(map[int]*seed.SeedStageState)
 	agent.SeedStageStatus = seedStageStatus
 	if agent.Config.LVM.Enabled {
 		lvm, lvmOpts, err := seed.New(
@@ -294,8 +294,12 @@ func (agent *Agent) Start() error {
 			agent.Logger.Info("Mydumper seed method initialized")
 		}
 	}
-	agent.Params.AvailiableSeedMethods = availiableSeedMethods
+	agent.AvailiableSeedMethods = availiableSeedMethods
 	agent.SeedMethods = seedMethods
+	agent.MySQLDatadir, err = dbagent.GetMySQLDatadir(agent.MySQLClient)
+	if err != nil {
+		return fmt.Errorf("Unable to get MySQL datadir path: %+v", err)
+	}
 	go agent.ContinuousOperation()
 	go agent.ServeHTTP()
 	go agent.UpdateSeedStatus()
@@ -360,10 +364,10 @@ func (agent *Agent) ServeHTTP() {
 	agent.Logger.Info("Web server started")
 }
 
-//SubmitAgent registers agent on Orchestrator
-func (agent *Agent) SubmitAgent() {
-	url := fmt.Sprintf("%s:%d/api/submit-agent", agent.Config.Orchestrator.URL, agent.Config.Orchestrator.AgentsPort)
-	payload, err := json.Marshal(agent.Params)
+//RegisterAgent registers agent on Orchestrator
+func (agent *Agent) RegisterAgent() {
+	url := fmt.Sprintf("%s:%d/api/register-agent", agent.Config.Orchestrator.URL, agent.Config.Orchestrator.AgentsPort)
+	payload, err := json.Marshal(agent.Info)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to marshall agent info")
 	}
@@ -396,7 +400,7 @@ func (agent *Agent) ContinuousOperation() {
 	resubmitTick := time.Tick(agent.Config.Common.ResubmitAgentInterval.Value())
 	url := fmt.Sprintf("%s:%d/api/agent-ping", agent.Config.Orchestrator.URL, agent.Config.Orchestrator.AgentsPort)
 
-	agent.SubmitAgent()
+	agent.RegisterAgent()
 	for range tick {
 		// Do stuff
 		if err := agent.PingServer(url); err != nil {
@@ -408,72 +412,75 @@ func (agent *Agent) ContinuousOperation() {
 		// See if we should also forget instances/agents (lower frequency)
 		select {
 		case <-resubmitTick:
-			agent.SubmitAgent()
+			agent.RegisterAgent()
 		default:
 		}
 	}
 }
 
-// GetAgentInfo return system and MySQL information of the agent host
-func (agent *Agent) GetAgentInfo() *AgentInfo {
-	agent.Lock()
-	defer agent.Unlock()
-
-	var err error
-	agent.Info = &AgentInfo{}
-	agent.Info.LocalSnapshotsHosts, err = osagent.GetSnapshotHosts(agent.Config.LVM.AvailableLocalSnapshotHostsCommand, agent.Config.Common.ExecWithSudo)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get local snapshot hosts")
-	}
-	agent.Info.SnaphostHosts, err = osagent.GetSnapshotHosts(agent.Config.LVM.AvailableSnapshotHostsCommand, agent.Config.Common.ExecWithSudo)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get snapshot hosts")
-	}
-	agent.Info.LogicalVolumes, err = osagent.GetLogicalVolumes("", agent.Config.LVM.SnapshotVolumesFilter, agent.Config.Common.ExecWithSudo)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get logical volumes info")
-	}
-	agent.Info.MountPoint, err = osagent.GetMount(agent.Config.LVM.SnapshotMountPoint, agent.Config.Common.ExecWithSudo)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get snapshot mount point info")
-	}
-	agent.Info.BackupDir = agent.Config.Common.BackupDir
-	agent.Info.BackupDirDiskFree, err = osagent.GetFSStatistics(agent.Config.Common.BackupDir, osagent.Free)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get backup directory free space info")
-	}
-	agent.Info.MySQLRunning, err = osagent.MySQLRunning(agent.Config.Common.ExecWithSudo)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get information about MySQL status (running/stopped)")
-	}
-	agent.Info.MySQLDatadir, err = dbagent.GetMySQLDatadir(agent.MySQLClient)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir path")
-	}
-	agent.Info.MySQLDatadirDiskUsed, err = osagent.GetDiskUsage(agent.Info.MySQLDatadir, agent.Config.Common.ExecWithSudo)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir used space info")
-	}
-	agent.Info.MySQLDatadirDiskFree, err = osagent.GetFSStatistics(agent.Info.MySQLDatadir, osagent.Free)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir free space info")
-	}
-	agent.Info.MySQLVersion, err = dbagent.GetMySQLVersion(agent.MySQLClient)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get MySQL version info")
-	}
-	agent.Info.MySQLDatabases, err = dbagent.GetMySQLDatabases(agent.MySQLClient)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get MySQL databases info")
-	}
+func (agent *Agent) GetMySQLErrorLog() ([]string, error) {
+	var mySQLErrorLogTail []string
 	mySQLLogFile, err := dbagent.GetMySQLLogFile(agent.MySQLClient)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL log file info")
 	} else {
-		agent.Info.MySQLErrorLogTail, err = osagent.GetMySQLErrorLogTail(mySQLLogFile, agent.Config.Common.ExecWithSudo)
+		mySQLErrorLogTail, err = osagent.GetMySQLErrorLogTail(mySQLLogFile, agent.Config.Common.ExecWithSudo)
 		if err != nil {
 			agent.Logger.WithField("error", err).Error("Unable to read MySQL log file")
 		}
 	}
-	return agent.Info
+	return mySQLErrorLogTail, err
+}
+
+// GetAgentInfo return system and MySQL information of the agent host
+func (agent *Agent) GetAgentData() *Data {
+	agent.Lock()
+	defer agent.Unlock()
+
+	var err error
+	agentData := &Data{}
+	agentData.LocalSnapshotsHosts, err = osagent.GetSnapshotHosts(agent.Config.LVM.AvailableLocalSnapshotHostsCommand, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get local snapshot hosts")
+	}
+	agentData.SnaphostHosts, err = osagent.GetSnapshotHosts(agent.Config.LVM.AvailableSnapshotHostsCommand, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get snapshot hosts")
+	}
+	agentData.LogicalVolumes, err = osagent.GetLogicalVolumes("", agent.Config.LVM.SnapshotVolumesFilter, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get logical volumes info")
+	}
+	agentData.MountPoint, err = osagent.GetMount(agent.Config.LVM.SnapshotMountPoint, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get snapshot mount point info")
+	}
+	agentData.BackupDir = agent.Config.Common.BackupDir
+	agentData.AvailiableSeedMethods = agent.AvailiableSeedMethods
+	agentData.BackupDirDiskFree, err = osagent.GetFSStatistics(agent.Config.Common.BackupDir, osagent.Free)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get backup directory free space info")
+	}
+	agentData.MySQLRunning, err = osagent.MySQLRunning(agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get information about MySQL status (running/stopped)")
+	}
+	agentData.MySQLDatadir = agent.MySQLDatadir
+	agentData.MySQLDatadirDiskUsed, err = osagent.GetDiskUsage(agentData.MySQLDatadir, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir used space info")
+	}
+	agentData.MySQLDatadirDiskFree, err = osagent.GetFSStatistics(agentData.MySQLDatadir, osagent.Free)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir free space info")
+	}
+	agentData.MySQLVersion, err = dbagent.GetMySQLVersion(agent.MySQLClient)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL version info")
+	}
+	agentData.MySQLDatabases, err = dbagent.GetMySQLDatabases(agent.MySQLClient)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL databases info")
+	}
+	return agentData
 }

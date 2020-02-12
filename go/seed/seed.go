@@ -63,7 +63,7 @@ type Plugin interface {
 	Prepare(side Side)
 	Backup(seedHost string, mysqlPort int)
 	Restore()
-	GetMetadata() (*BackupMetadata, error)
+	GetMetadata() (*SeedMetadata, error)
 	Cleanup(side Side)
 	isAvailable() bool
 	getSupportedEngines() []mysql.Engine
@@ -82,7 +82,7 @@ type Base struct {
 	SSLCertFile   string
 	SSLCAFile     string
 	BackupDir     string
-	StatusChan    chan *StageStatus
+	StatusChan    chan *SeedStageState
 }
 
 type MethodOpts struct {
@@ -91,7 +91,7 @@ type MethodOpts struct {
 	BackupToDatadir  bool
 }
 
-type BackupMetadata struct {
+type SeedMetadata struct {
 	LogFile      string
 	LogPos       int64
 	GtidExecuted string
