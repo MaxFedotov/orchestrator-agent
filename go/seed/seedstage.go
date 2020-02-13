@@ -14,12 +14,12 @@ const (
 	Prepare Stage = iota
 	Backup
 	Restore
-	GetMetadata
 	Cleanup
+	ConnectSlave
 )
 
 func (s Stage) String() string {
-	return [...]string{"Prepare", "Backup", "Restore", "GetMetadata", "Cleanup"}[s]
+	return [...]string{"Prepare", "Backup", "Restore", "Cleanup", "ConnectSlave"}[s]
 }
 
 func (s Stage) MarshalJSON() ([]byte, error) {

@@ -124,13 +124,12 @@ func (this *HttpAPI) Unmount(params martini.Params, r render.Render, req *http.R
 	if err := this.validateToken(r, req); err != nil {
 		return
 	}
-	//output, err := osagent.Unmount(agent.Config.LVM.SnapshotMountPoint, agent.Config.Common.ExecWithSudo)
-	//if err != nil {
-	//	r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-	//	return
-	//}
-	//r.JSON(200, output)
-	r.JSON(200, agent.GetAgentData())
+	output, err := osagent.Unmount(agent.Config.LVM.SnapshotMountPoint, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	r.JSON(200, output)
 }
 
 // CreateSnapshot lists dc-local available snapshots for this host
