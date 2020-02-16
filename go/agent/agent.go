@@ -54,7 +54,7 @@ type Agent struct {
 	Logger                *log.Entry
 	StatusChan            chan *seed.SeedStageState
 	SeedMethods           map[seed.Method]seed.Plugin
-	SeedStageStatus       map[int]*seed.SeedStageState
+	SeedStageStatus       map[int]map[seed.Stage]*seed.SeedStageState
 	ActiveSeedID          int
 	sync.RWMutex
 }
@@ -123,12 +123,6 @@ func (agent *Agent) parseConfig() error {
 	}
 	if len(cfg.Mysql.SeedPassword) == 0 {
 		return fmt.Errorf("mysql seed-password not specified")
-	}
-	if len(cfg.Mysql.ReplicationUser) == 0 {
-		return fmt.Errorf("mysql replication-user not specified")
-	}
-	if len(cfg.Mysql.ReplicationPassword) == 0 {
-		return fmt.Errorf("mysql replication-password not specified")
 	}
 	if cfg.LVM.Enabled {
 		if len(cfg.LVM.CreateSnapshotCommand) == 0 {
@@ -217,7 +211,7 @@ func (agent *Agent) Start() error {
 	}
 	seedMethods := make(map[seed.Method]seed.Plugin)
 	availiableSeedMethods := make(map[seed.Method]*seed.MethodOpts)
-	seedStageStatus := make(map[int]*seed.SeedStageState)
+	seedStageStatus := make(map[int]map[seed.Stage]*seed.SeedStageState)
 	agent.SeedStageStatus = seedStageStatus
 	if agent.Config.LVM.Enabled {
 		lvm, lvmOpts, err := seed.New(
@@ -311,7 +305,9 @@ func (agent *Agent) UpdateSeedStatus() {
 		select {
 		case seedStatus := <-agent.StatusChan:
 			agent.Lock()
-			agent.SeedStageStatus[agent.ActiveSeedID] = seedStatus
+			seetStageStatus := make(map[seed.Stage]*seed.SeedStageState)
+			seetStageStatus[seedStatus.Stage] = seedStatus
+			agent.SeedStageStatus[agent.ActiveSeedID] = seetStageStatus
 			agent.Unlock()
 		}
 	}

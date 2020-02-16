@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/github/orchestrator-agent/go/config"
 	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/outbrain/golib/log"
 	"gopkg.in/pipe.v2"
@@ -127,39 +126,6 @@ func MySQLStop(execWithSudo bool) error {
 
 func MySQLStart(execWithSudo bool) error {
 	return cmd.CommandRun("systemctl start mysqld", execWithSudo)
-}
-
-func ReceiveMySQLSeedData(seedId string, execWithSudo bool) error {
-	directory := "/var/lib/mysql"
-
-	err := cmd.CommandRunWithFunc(
-		fmt.Sprintf("%s %s %d", config.Config.ReceiveSeedDataCommand, directory, SeedTransferPort),
-		execWithSudo,
-		func(command *pipe.State) {
-			activeCommands[seedId] = command
-			log.Debug("ReceiveMySQLSeedData command completed")
-		})
-	if err != nil {
-		return log.Errore(err)
-	}
-
-	return err
-}
-
-func SendMySQLSeedData(targetHostname string, directory string, seedId string, execWithSudo bool) error {
-	if directory == "" {
-		return log.Error("Empty directory in SendMySQLSeedData")
-	}
-	err := cmd.CommandRunWithFunc(fmt.Sprintf("%s %s %s %d", config.Config.SendSeedDataCommand, directory, targetHostname, SeedTransferPort),
-		execWithSudo,
-		func(command *pipe.State) {
-			activeCommands[seedId] = command
-			log.Debug("SendMySQLSeedData command completed")
-		})
-	if err != nil {
-		return log.Errore(err)
-	}
-	return err
 }
 
 func SeedCommandCompleted(seedId string) bool {

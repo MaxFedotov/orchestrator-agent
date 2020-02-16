@@ -25,7 +25,6 @@ import (
 
 	prefixed "github.com/MaxFedotov/logrus-prefixed-formatter"
 	"github.com/github/orchestrator-agent/go/agent"
-	"github.com/github/orchestrator-agent/go/config"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -73,12 +72,6 @@ func main() {
 
 	if err := app.Start(); err != nil {
 		defaultLogger.WithField("error", err).Fatal("Unable to initialize orchestrator-agent")
-	}
-
-	if len(*configFile) > 0 {
-		config.ForceRead("/etc/orchestrator-agent.conf.json")
-	} else {
-		config.Read("/etc/orchestrator-agent.conf.json", "conf/orchestrator-agent.conf.json", "orchestrator-agent.conf.json")
 	}
 
 	defaultLogger.WithField("token", app.Info.Token).Info("Process token generated")

@@ -29,6 +29,14 @@ func (s Stage) MarshalJSON() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+var ToSeedStage = map[string]Stage{
+	"Prepare":      Prepare,
+	"Backup":       Backup,
+	"Restore":      Restore,
+	"Cleanup":      Cleanup,
+	"ConnectSlave": ConnectSlave,
+}
+
 type Status int
 
 const (
