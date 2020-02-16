@@ -30,6 +30,7 @@ type commonConfig struct {
 	BackupDir             string           `toml:"backup-dir"`
 	PostSeedCommand       string           `toml:"post-seed-command"`
 	StatusEndpoint        string           `toml:"status-endpoint"`
+	StatusBadSeconds      *config.Duration `toml:"status-bad-seconds"`
 }
 
 type orchestratorConfig struct {
@@ -43,11 +44,9 @@ type loggingConfig struct {
 }
 
 type mysqlConfig struct {
-	Port                int    `toml:"port"`
-	SeedUser            string `toml:"seed-user"`
-	SeedPassword        string `toml:"seed-password"`
-	ReplicationUser     string `toml:"replication-user"`
-	ReplicationPassword string `toml:"replication-password"`
+	Port         int    `toml:"port"`
+	SeedUser     string `toml:"seed-user"`
+	SeedPassword string `toml:"seed-password"`
 }
 
 // Config is used to store all configuration parameters
@@ -94,6 +93,9 @@ func NewConfig() *Config {
 			BackupDir:         "",
 			PostSeedCommand:   "",
 			StatusEndpoint:    "/api/status",
+			StatusBadSeconds: &config.Duration{
+				Duration: 300 * time.Second,
+			},
 		},
 		Orchestrator: orchestratorConfig{
 			URL:        "",
@@ -104,11 +106,9 @@ func NewConfig() *Config {
 			Level: "Info",
 		},
 		Mysql: mysqlConfig{
-			Port:                3306,
-			SeedUser:            "",
-			SeedPassword:        "",
-			ReplicationUser:     "",
-			ReplicationPassword: "",
+			Port:         3306,
+			SeedUser:     "",
+			SeedPassword: "",
 		},
 		MysqlDump: &seed.MysqldumpConfig{
 			Enabled:  true,
