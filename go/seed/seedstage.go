@@ -43,6 +43,7 @@ const (
 	Running Status = iota
 	Completed
 	Error
+	Cancelled
 )
 
 func (s Status) String() string {
