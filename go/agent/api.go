@@ -388,7 +388,7 @@ func (this *HttpAPI) Prepare(params martini.Params, r render.Render, req *http.R
 	var seedMethod seed.Method
 	var seedSide seed.Side
 	var ok bool
-	seedID, err := strconv.Atoi(params["seedID"])
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
@@ -409,9 +409,14 @@ func (this *HttpAPI) Prepare(params martini.Params, r render.Render, req *http.R
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed side undefinded"})
 		return
 	}
+	if agent.ActiveSeed.SeedID == seedID && agent.ActiveSeed.Stage == seed.Prepare && (agent.ActiveSeed.Status == seed.Running || agent.ActiveSeed.Status == seed.Completed) {
+		r.Text(202, "Prepare stage already started for seed")
+	}
 	agent.Lock()
 	defer agent.Unlock()
-	agent.ActiveSeedID = seedID
+	agent.ActiveSeed.SeedID = seedID
+	agent.ActiveSeed.Stage = seed.Prepare
+	agent.ActiveSeed.Status = seed.Running
 	go agent.SeedMethods[seedMethod].Prepare(seedSide)
 	r.Text(202, "Started")
 }
@@ -423,15 +428,15 @@ func (this *HttpAPI) Backup(params martini.Params, r render.Render, req *http.Re
 	}
 	var seedMethod seed.Method
 	var ok bool
-	seedID, err := strconv.Atoi(params["seedID"])
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	if seedID != agent.ActiveSeedID {
-		agent.Logger.WithField("seedID", seedID).Error("Unable to start backup. SeedID not found")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start backup. SeedID not found"})
+	if seedID != agent.ActiveSeed.SeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to start backup stage. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start backup stage. SeedID not found"})
 		return
 	}
 	mysqlPort, err := strconv.Atoi(params["mysqlPort"])
@@ -451,6 +456,12 @@ func (this *HttpAPI) Backup(params martini.Params, r render.Render, req *http.Re
 		return
 	}
 	seedHost := params["seedHost"]
+	if agent.ActiveSeed.Stage == seed.Backup && (agent.ActiveSeed.Status == seed.Running || agent.ActiveSeed.Status == seed.Completed) {
+		r.Text(202, "Backup stage already started for seed")
+	}
+	agent.Lock()
+	defer agent.Unlock()
+	agent.ActiveSeed.Stage = seed.Backup
 	go agent.SeedMethods[seedMethod].Backup(seedHost, mysqlPort)
 	r.Text(202, "Started")
 }
@@ -462,15 +473,15 @@ func (this *HttpAPI) Restore(params martini.Params, r render.Render, req *http.R
 	}
 	var seedMethod seed.Method
 	var ok bool
-	seedID, err := strconv.Atoi(params["seedID"])
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	if seedID != agent.ActiveSeedID {
-		agent.Logger.WithField("seedID", seedID).Error("Unable to start restore. SeedID not found")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start restore. SeedID not found"})
+	if seedID != agent.ActiveSeed.SeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to start restore stage. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start restore stage. SeedID not found"})
 		return
 	}
 	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
@@ -483,6 +494,12 @@ func (this *HttpAPI) Restore(params martini.Params, r render.Render, req *http.R
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
 		return
 	}
+	if agent.ActiveSeed.Stage == seed.Restore && (agent.ActiveSeed.Status == seed.Running || agent.ActiveSeed.Status == seed.Completed) {
+		r.Text(202, "Restore stage already started for seed")
+	}
+	agent.Lock()
+	defer agent.Unlock()
+	agent.ActiveSeed.Stage = seed.Restore
 	go agent.SeedMethods[seedMethod].Restore()
 	r.Text(202, "Started")
 }
@@ -495,15 +512,15 @@ func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.R
 	var seedMethod seed.Method
 	var seedSide seed.Side
 	var ok bool
-	seedID, err := strconv.Atoi(params["seedID"])
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	if seedID != agent.ActiveSeedID {
-		agent.Logger.WithField("seedID", seedID).Error("Unable to start cleanup. SeedID not found")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start cleanup. SeedID not found"})
+	if seedID != agent.ActiveSeed.SeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to start cleanup stage. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start cleanup stage. SeedID not found"})
 		return
 	}
 	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
@@ -521,6 +538,12 @@ func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.R
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed side undefinded"})
 		return
 	}
+	if agent.ActiveSeed.Stage == seed.Cleanup && (agent.ActiveSeed.Status == seed.Running || agent.ActiveSeed.Status == seed.Completed) {
+		r.Text(202, "Restore stage already started for seed")
+	}
+	agent.Lock()
+	defer agent.Unlock()
+	agent.ActiveSeed.Stage = seed.Cleanup
 	go agent.SeedMethods[seedMethod].Cleanup(seedSide)
 	r.Text(202, "Started")
 }
@@ -532,15 +555,15 @@ func (this *HttpAPI) GetMetadata(params martini.Params, r render.Render, req *ht
 	}
 	var seedMethod seed.Method
 	var ok bool
-	seedID, err := strconv.Atoi(params["seedID"])
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	if seedID != agent.ActiveSeedID {
-		agent.Logger.WithField("seedID", seedID).Error("Unable to start cleanup. SeedID not found")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start cleanup. SeedID not found"})
+	if seedID != agent.ActiveSeed.SeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to get metadata for seed. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to get metadata for seed. SeedID not found"})
 		return
 	}
 	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
@@ -559,6 +582,10 @@ func (this *HttpAPI) GetMetadata(params martini.Params, r render.Render, req *ht
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
+	agent.Lock()
+	defer agent.Unlock()
+	agent.ActiveSeed.Stage = seed.ConnectSlave
+	agent.ActiveSeed.Status = seed.Completed
 	r.JSON(200, metadata)
 }
 
@@ -569,13 +596,13 @@ func (this *HttpAPI) AbortSeedStage(params martini.Params, r render.Render, req 
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	seedID, err := strconv.Atoi(params["seedID"])
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithFields(log.Fields{"error": err, "seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Unable to parse seedID")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	if seedID != agent.ActiveSeedID {
+	if seedID != agent.ActiveSeed.SeedID {
 		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Unable to abort seed stage. SeedID not found")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seed stage. SeedID not found"})
 		return
@@ -592,7 +619,10 @@ func (this *HttpAPI) AbortSeedStage(params martini.Params, r render.Render, req 
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seed. Seed not running"})
 		return
 	}
+	agent.Lock()
+	defer agent.Unlock()
 	agent.SeedStageStatus[seedID][seedStage].Command.Kill()
+	agent.ActiveSeed.Status = seed.Cancelled
 	r.Text(200, "killed")
 }
 
@@ -602,7 +632,7 @@ func (this *HttpAPI) SeedStageState(params martini.Params, r render.Render, req 
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	seedID, err := strconv.Atoi(params["seedID"])
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithFields(log.Fields{"error": err, "seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Unable to parse seedID")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})

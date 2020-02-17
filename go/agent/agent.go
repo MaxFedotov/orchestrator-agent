@@ -54,8 +54,8 @@ type Agent struct {
 	Logger                *log.Entry
 	StatusChan            chan *seed.SeedStageState
 	SeedMethods           map[seed.Method]seed.Plugin
-	SeedStageStatus       map[int]map[seed.Stage]*seed.SeedStageState
-	ActiveSeedID          int
+	SeedStageStatus       map[int64]map[seed.Stage]*seed.SeedStageState
+	ActiveSeed            *ActiveSeed
 	sync.RWMutex
 }
 
@@ -64,6 +64,12 @@ type Info struct {
 	Port      int
 	Token     string
 	MySQLPort int
+}
+
+type ActiveSeed struct {
+	SeedID int64
+	Stage  seed.Stage
+	Status seed.Status
 }
 
 type Data struct {
@@ -211,7 +217,8 @@ func (agent *Agent) Start() error {
 	}
 	seedMethods := make(map[seed.Method]seed.Plugin)
 	availiableSeedMethods := make(map[seed.Method]*seed.MethodOpts)
-	seedStageStatus := make(map[int]map[seed.Stage]*seed.SeedStageState)
+	seedStageStatus := make(map[int64]map[seed.Stage]*seed.SeedStageState)
+	agent.ActiveSeed = &ActiveSeed{}
 	agent.SeedStageStatus = seedStageStatus
 	if agent.Config.LVM.Enabled {
 		lvm, lvmOpts, err := seed.New(
@@ -307,7 +314,8 @@ func (agent *Agent) UpdateSeedStatus() {
 			agent.Lock()
 			seetStageStatus := make(map[seed.Stage]*seed.SeedStageState)
 			seetStageStatus[seedStatus.Stage] = seedStatus
-			agent.SeedStageStatus[agent.ActiveSeedID] = seetStageStatus
+			agent.SeedStageStatus[agent.ActiveSeed.SeedID] = seetStageStatus
+			agent.ActiveSeed.Status = seedStatus.Status
 			agent.Unlock()
 		}
 	}
