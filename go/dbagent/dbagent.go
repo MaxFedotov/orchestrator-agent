@@ -18,7 +18,6 @@ package dbagent
 
 import (
 	"fmt"
-	"regexp"
 
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/openark/golib/sqlutils"
@@ -118,7 +117,5 @@ func GetMySQLVersion(m *mysql.MySQLClient) (version string, err error) {
 		version = m.GetString("version")
 		return nil
 	})
-	re := regexp.MustCompile(`(\d+)\.(\d+)`)
-	majorVersion := re.FindStringSubmatch(version)[0]
-	return majorVersion, err
+	return version, err
 }
