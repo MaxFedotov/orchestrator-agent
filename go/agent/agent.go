@@ -83,7 +83,6 @@ type Data struct {
 	MySQLDatadir          string
 	MySQLDatadirDiskUsed  int64
 	MySQLDatadirDiskFree  int64
-	MySQLVersion          string
 	MySQLDatabases        map[string]*dbagent.MySQLDatabase
 	AvailiableSeedMethods map[seed.Method]*seed.MethodOpts
 }
@@ -477,10 +476,6 @@ func (agent *Agent) GetAgentData() *Data {
 	agentData.MySQLDatadirDiskFree, err = osagent.GetFSStatistics(agentData.MySQLDatadir, osagent.Free)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL datadir free space info")
-	}
-	agentData.MySQLVersion, err = dbagent.GetMySQLVersion(agent.MySQLClient)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get MySQL version info")
 	}
 	agentData.MySQLDatabases, err = dbagent.GetMySQLDatabases(agent.MySQLClient)
 	if err != nil {

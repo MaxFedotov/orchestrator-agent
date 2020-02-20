@@ -109,13 +109,3 @@ func GetMySQLLogFile(m *mysql.MySQLClient) (logFile string, err error) {
 	})
 	return logFile, err
 }
-
-// GetMySQLVersion return version of installed MySQL
-func GetMySQLVersion(m *mysql.MySQLClient) (version string, err error) {
-	query := `SELECT @@version AS version`
-	err = mysql.QueryData(m.Conn, query, sqlutils.Args(), func(m sqlutils.RowMap) error {
-		version = m.GetString("version")
-		return nil
-	})
-	return version, err
-}
