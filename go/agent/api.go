@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/helper/token"
 	"github.com/github/orchestrator-agent/go/osagent"
 	"github.com/github/orchestrator-agent/go/seed"
@@ -184,19 +185,6 @@ func (this *HttpAPI) MySQLErrorLogTail(params martini.Params, r render.Render, r
 		return
 	}
 	r.JSON(200, output)
-}
-
-// PostCopy
-func (this *HttpAPI) PostCopy(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	err := osagent.PostCopy(agent.Config.Common.PostSeedCommand, agent.Config.Common.ExecWithSudo)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, err == nil)
 }
 
 // SeedCommandCompleted
@@ -372,7 +360,7 @@ func (this *HttpAPI) ApplyRelaylogContents(params martini.Params, r render.Rende
 }
 
 // getAgent returns information about agent
-func (this *HttpAPI) getAgent(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+func (this *HttpAPI) getAgentData(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
@@ -589,6 +577,30 @@ func (this *HttpAPI) GetMetadata(params martini.Params, r render.Render, req *ht
 	r.JSON(200, metadata)
 }
 
+// postSeedCmd executes PostSeedCommand from config after seed will be completed
+func (this *HttpAPI) postSeedCmd(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req, agent); err != nil {
+		return
+	}
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
+	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err, "seedID": params["seedID"]}).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedID != agent.ActiveSeed.SeedID {
+		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"]}).Error("Unable to execute post seed command. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to execute post seed command. SeedID not found"})
+		return
+	}
+	if err = cmd.CommandRun(agent.Config.Common.PostSeedCommand, agent.Config.Common.ExecWithSudo); err != nil {
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+
+	r.JSON(200, err == nil)
+}
+
 // AbortSeed tries to abort seed process
 func (this *HttpAPI) AbortSeedStage(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	var seedStage seed.Stage
@@ -649,14 +661,6 @@ func (this *HttpAPI) SeedStageState(params martini.Params, r render.Render, req 
 		return
 	}
 	r.JSON(200, agent.SeedStageStatus[seedID][seedStage])
-}
-
-// TODELETE
-func (this *HttpAPI) getAgentParams(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	r.JSON(200, agent.Info)
 }
 
 /*
@@ -902,9 +906,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/mysql-error-log-tail", this.MySQLErrorLogTail)
 
 	// status
-	m.Get("/api/get-agent-data", this.getAgent)
-	m.Get("/api/get-agent-info", this.getAgentParams) // TO DELETE
-	//m.Get("/api/seed-status", this.seedStatus)
+	m.Get("/api/get-agent-data", this.getAgentData)
 
 	// seed process
 	m.Get("/api/prepare/:seedID/:seedMethod/:seedSide", this.Prepare)
@@ -914,10 +916,9 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/get-metadata/:seedID/:seedMethod", this.GetMetadata)
 	m.Get("/api/abort-seed-stage/:seedID/:seedStage", this.AbortSeedStage)
 	m.Get("/api/seed-stage-state/:seedID/:seedStage", this.SeedStageState)
+	m.Get("/api/post-seed-cmd/:seedID", this.postSeedCmd)
 
 	// ??
-	m.Get("/api/post-copy", this.PostCopy)
-	//m.Get("/api/send-mysql-seed-data/:targetHost/:seedId", this.SendMySQLSeedData)
 	m.Get("/api/seed-command-completed/:seedId", this.SeedCommandCompleted)
 	m.Get("/api/seed-command-succeeded/:seedId", this.SeedCommandSucceeded)
 
