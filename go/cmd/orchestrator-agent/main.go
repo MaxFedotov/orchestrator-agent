@@ -28,7 +28,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var AppVersion string
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 func acceptSignal() {
 	c := make(chan os.Signal, 1)
@@ -51,12 +55,8 @@ func main() {
 	printVersion := flag.Bool("version", false, "Print version")
 	flag.Parse()
 
-	if AppVersion == "" {
-		AppVersion = "local-build"
-	}
-
 	if *printVersion {
-		fmt.Print(AppVersion)
+		fmt.Printf("%v, commit %v, built at %v", version, commit, date)
 		return
 	}
 
@@ -68,7 +68,7 @@ func main() {
 		defaultLogger.WithField("config", *configFile).Fatal(err)
 	}
 
-	defaultLogger.WithField("version", AppVersion).Info("Starting orchestrator-agent")
+	defaultLogger.WithField("version", version).Info("Starting orchestrator-agent")
 
 	if err := app.Start(); err != nil {
 		defaultLogger.WithField("error", err).Fatal("Unable to initialize orchestrator-agent")

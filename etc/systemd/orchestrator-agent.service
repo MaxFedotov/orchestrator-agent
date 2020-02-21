@@ -1,0 +1,17 @@
+[Unit]
+Description=orchestrator-agent: MySQL management agent
+Documentation=https://github.com/github/orchestrator-agent
+After=syslog.target network.target
+
+[Service]
+User=orchestrator-agent
+Group=orchestrator-agent
+Type=simple
+ExecStart=/usr/bin/orchestrator-agent
+EnvironmentFile=-/etc/sysconfig/orchestrator-agent
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=60s
+
+[Install]
+WantedBy=multi-user.target

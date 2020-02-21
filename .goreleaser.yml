@@ -1,0 +1,84 @@
+# Make sure to check the documentation at http://goreleaser.com
+before:
+  hooks:
+    - go mod download
+builds:
+-
+  dir: go
+  main: ./cmd/orchestrator-agent/main.go
+  goos:
+    - linux
+  goarch:
+    - amd64
+env:
+  - CGO_ENABLED=0
+  - GO111MODULE=on
+archives:
+- 
+  replacements:
+    amd64: x86_64
+  files:
+    - conf/*
+    - etc/*
+  name_template: "{{ .ProjectName }}-{{ .Version }}.{{ .Arch }}"
+nfpms:
+-
+  id: systemd
+  vendor: GitHub
+  homepage: https://github.com/github/orchestrator-agent
+  maintainer: MaxFedotov <m.a.fedotov@gmail.com>
+  description: "orchestrator-agent: MySQL management agent"
+  file_name_template: "{{ .ProjectName }}-{{ .Version }}.{{ .Arch }}"
+  license: Apache 2.0
+  formats:
+    - deb
+    - rpm
+  dependencies:
+    - socat
+  bindir: /usr/bin
+  empty_folders:
+    - /var/log/orchestrator-agent
+  files:
+    "etc/systemd/orchestrator-agent.service": "/etc/systemd/system/orchestrator-agent.service"
+  config_files:
+    "conf/orchestrator-agent.conf": "/etc/orchestrator-agent.conf"
+  scripts:
+    preinstall: "scripts/pre-install/pre-install.sh"
+    postinstall: "scripts/post-install/post-install.sh"
+  overrides:
+    rpm:
+      replacements:
+        amd64: x86_64
+-
+  id: sysv
+  vendor: GitHub
+  homepage: https://github.com/github/orchestrator-agent
+  maintainer: MaxFedotov <m.a.fedotov@gmail.com>
+  description: "orchestrator-agent: MySQL management agent"
+  file_name_template: "{{ .ProjectName }}-sysv-{{ .Version }}.{{ .Arch }}"
+  license: Apache 2.0
+  formats:
+    - deb
+    - rpm
+  dependencies:
+    - socat
+  bindir: /usr/bin
+  empty_folders:
+    - /var/log/orchestrator-agent
+  files:
+    "etc/init.d/orchestrator-agent.bash": "/etc/init.d/orchestrator-agent.bash"
+  config_files:
+    "conf/orchestrator-agent.conf": "/etc/orchestrator-agent.conf"
+  scripts:
+    preinstall: "scripts/pre-install/pre-install.sh"
+    postinstall: "scripts/post-install/post-install.sh"
+  overrides:
+    rpm:
+      replacements:
+        amd64: x86_64
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'
