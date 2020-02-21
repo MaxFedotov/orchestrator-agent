@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/github/orchestrator-agent/go/helper/cmd"
-	"github.com/github/orchestrator-agent/go/helper/token"
 	"github.com/github/orchestrator-agent/go/osagent"
 	"github.com/github/orchestrator-agent/go/seed"
 	"github.com/github/orchestrator/go/config"
@@ -80,7 +79,7 @@ func (this *HttpAPI) validateToken(r render.Render, req *http.Request, agent *Ag
 	if requestToken == "" {
 		requestToken = req.URL.Query().Get("token")
 	}
-	if requestToken == token.ProcessToken.Hash {
+	if requestToken == agent.Info.Token {
 		return nil
 	}
 	err := errors.New("Invalid token")

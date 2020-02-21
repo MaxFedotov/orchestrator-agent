@@ -18,7 +18,7 @@ func InitHTTPClient(httpTimeout *config.Duration, sslSkipVerify bool, sslCAFile 
 	dialTimeout := func(network, addr string) (net.Conn, error) {
 		return net.DialTimeout(network, addr, timeout)
 	}
-	tlsConfig, err := buildTLS(sslSkipVerify, sslCAFile, useMutualTLS, sslCertFile, sslPrivateKeyFile)
+	tlsConfig, err := buildTLS(sslSkipVerify, sslCAFile, useMutualTLS, sslCertFile, sslPrivateKeyFile, logger)
 	if err != nil {
 		logger.Error(err)
 	}
@@ -30,8 +30,8 @@ func InitHTTPClient(httpTimeout *config.Duration, sslSkipVerify bool, sslCAFile 
 	return &http.Client{Transport: httpTransport}
 }
 
-func buildTLS(sslSkipVerify bool, sslCAFile string, useMutualTLS bool, sslCertFile string, sslPrivateKeyFile string) (*tls.Config, error) {
-	tlsConfig, err := ssl.NewTLSConfig(sslCAFile, useMutualTLS)
+func buildTLS(sslSkipVerify bool, sslCAFile string, useMutualTLS bool, sslCertFile string, sslPrivateKeyFile string, logger *log.Entry) (*tls.Config, error) {
+	tlsConfig, err := ssl.NewTLSConfig(sslCAFile, useMutualTLS, logger)
 	if err != nil {
 		return tlsConfig, err
 	}

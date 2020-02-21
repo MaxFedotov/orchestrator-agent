@@ -169,11 +169,6 @@ func (agent *Agent) parseConfig() error {
 			log.SetLevel(log.WarnLevel)
 		}
 	}
-	if cfg.Common.TokenHintFile != "" {
-		agent.Logger.WithField("TokenHintFile", cfg.Common.TokenHintFile).Debug("Writing token to file")
-		err := ioutil.WriteFile(cfg.Common.TokenHintFile, []byte(agent.Info.Token), 0644)
-		agent.Logger.WithField("error", err).Error("Unable to create token hint file")
-	}
 	agent.Config = cfg
 	return nil
 }
@@ -190,9 +185,20 @@ func (agent *Agent) Start() error {
 	agent.Info = &Info{
 		Hostname:  hostname,
 		Port:      agent.Config.Common.Port,
-		Token:     token.ProcessToken.Hash,
 		MySQLPort: agent.Config.Mysql.Port,
 	}
+	agentToken, err := token.NewToken()
+	if err != nil {
+		return fmt.Errorf("Unable to generate toek for agent: %+v", err)
+	}
+	agent.Info.Token = agentToken.Hash
+	if agent.Config.Common.TokenHintFile != "" {
+		agent.Logger.WithField("TokenHintFile", agent.Config.Common.TokenHintFile).Debug("Writing token to file")
+		if err := ioutil.WriteFile(agent.Config.Common.TokenHintFile, []byte(agent.Info.Token), 0644); err != nil {
+			agent.Logger.WithField("error", err).Error("Unable to create token hint file")
+		}
+	}
+
 	agent.HTTPClient = http.InitHTTPClient(agent.Config.Common.HTTPTimeout, agent.Config.Common.SSLSkipVerify, agent.Config.Common.SSLCAFile, agent.Config.Common.UseMutualTLS, agent.Config.Common.SSLCertFile, agent.Config.Common.SSLPrivateKeyFile, agent.Logger)
 
 	agent.MySQLClient, err = dbagent.NewMySQLClient(agent.Config.Mysql.SeedUser, agent.Config.Mysql.SeedPassword, agent.Config.Mysql.Port)
@@ -336,7 +342,7 @@ func (agent *Agent) ServeHTTP() {
 	}))
 	m.Use(martini.Static("resources/public"))
 	if agent.Config.Common.UseMutualTLS {
-		m.Use(ssl.VerifyOUs(agent.Config.Common.SSLValidOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify))
+		m.Use(ssl.VerifyOUs(agent.Config.Common.SSLValidOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify, agent.Logger))
 	}
 
 	agent.Logger.WithField("port", agent.Config.Common.Port).Info("Starting HTTP Server")
@@ -348,7 +354,7 @@ func (agent *Agent) ServeHTTP() {
 	// Serve
 	if agent.Config.Common.UseSSL {
 		log.Info("Starting HTTPS listener")
-		tlsConfig, err := ssl.NewTLSConfig(agent.Config.Common.SSLCAFile, agent.Config.Common.UseMutualTLS)
+		tlsConfig, err := ssl.NewTLSConfig(agent.Config.Common.SSLCAFile, agent.Config.Common.UseMutualTLS, agent.Logger)
 		if err != nil {
 			log.Fatal(err)
 		}

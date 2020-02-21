@@ -14,11 +14,13 @@ import (
 	"github.com/github/orchestrator-agent/go/agent"
 	"github.com/github/orchestrator-agent/go/helper/ssl"
 	"github.com/github/orchestrator/go/config"
+	log "github.com/sirupsen/logrus"
 )
 
 func initAgent() *agent.Agent {
 	configFile := "/etc/orchestrator-agent.conf"
-	agent := agent.New(configFile, nil)
+	defaultLogger := log.WithFields(log.Fields{"prefix": "agent"})
+	agent := agent.New(configFile, defaultLogger)
 	agent.LoadConfig()
 	return agent
 }
@@ -39,10 +41,11 @@ func TestHasString(t *testing.T) {
 
 // TODO: Build a fake CA and make sure it loads up
 func TestNewTLSConfig(t *testing.T) {
+	agent := initAgent()
 	fakeCA := writeFakeFile(pemCertificate)
 	defer syscall.Unlink(fakeCA)
 
-	conf, err := ssl.NewTLSConfig(fakeCA, true)
+	conf, err := ssl.NewTLSConfig(fakeCA, true, agent.Logger)
 	if err != nil {
 		t.Errorf("Could not create new TLS config: %s", err)
 	}
@@ -53,7 +56,7 @@ func TestNewTLSConfig(t *testing.T) {
 		t.Errorf("ClientCA empty even though cert provided")
 	}
 
-	conf, err = ssl.NewTLSConfig("", false)
+	conf, err = ssl.NewTLSConfig("", false, agent.Logger)
 	if err != nil {
 		t.Errorf("Could not create new TLS config: %s", err)
 	}
@@ -75,11 +78,11 @@ func TestStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	config.Config.StatusOUVerify = false
-	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify); err != nil {
+	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify, agent.Logger); err != nil {
 		t.Errorf("Failed even with verification off")
 	}
 	config.Config.StatusOUVerify = true
-	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify); err == nil {
+	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify, agent.Logger); err == nil {
 		t.Errorf("Did not fail on with bad verification")
 	}
 }
@@ -93,7 +96,7 @@ func TestVerify(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify); err == nil {
+	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify, agent.Logger); err == nil {
 		t.Errorf("Did not fail on lack of TLS config")
 	}
 
@@ -106,7 +109,7 @@ func TestVerify(t *testing.T) {
 	var tcs tls.ConnectionState
 	req.TLS = &tcs
 
-	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify); err == nil {
+	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify, agent.Logger); err == nil {
 		t.Errorf("Found a valid OU without any being available")
 	}
 
@@ -120,13 +123,13 @@ func TestVerify(t *testing.T) {
 	// Look for fake OU
 	validOUs = []string{"testing"}
 
-	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify); err != nil {
+	if err := ssl.Verify(req, validOUs, agent.Config.Common.StatusEndpoint, agent.Config.Common.StatusOUVerify, agent.Logger); err != nil {
 		t.Errorf("Failed to verify certificate OU")
 	}
 }
 
 func TestAppendKeyPair(t *testing.T) {
-	c, err := ssl.NewTLSConfig("", false)
+	c, err := ssl.NewTLSConfig("", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

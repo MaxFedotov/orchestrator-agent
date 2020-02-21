@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-martini/martini"
-	"github.com/outbrain/golib/log"
+	log "github.com/sirupsen/logrus"
 )
 
 var cipherSuites = []uint16{
@@ -25,7 +25,7 @@ var cipherSuites = []uint16{
 	tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 }
 
-// Determine if a string element is in a string array
+// HasString determines if a string element is in a string array
 func HasString(elem string, arr []string) bool {
 	for _, s := range arr {
 		if s == elem {
@@ -37,7 +37,7 @@ func HasString(elem string, arr []string) bool {
 
 // NewTLSConfig returns an initialized TLS configuration suitable for client
 // authentication. If caFile is non-empty, it will be loaded.
-func NewTLSConfig(caFile string, mutualTLS bool) (*tls.Config, error) {
+func NewTLSConfig(caFile string, mutualTLS bool, logger *log.Entry) (*tls.Config, error) {
 	var c tls.Config
 
 	// TLS 1.0 at a minimum (for mysql)
@@ -67,7 +67,7 @@ func NewTLSConfig(caFile string, mutualTLS bool) (*tls.Config, error) {
 
 // Verify that the OU of the presented client certificate matches the list
 // of Valid OUs
-func Verify(r *nethttp.Request, validOUs []string, StatusEndpoint string, StatusOUVerify bool) error {
+func Verify(r *nethttp.Request, validOUs []string, StatusEndpoint string, StatusOUVerify bool, logger *log.Entry) error {
 	if strings.Contains(r.URL.String(), StatusEndpoint) && !StatusOUVerify {
 		return nil
 	}
@@ -90,10 +90,10 @@ func Verify(r *nethttp.Request, validOUs []string, StatusEndpoint string, Status
 }
 
 // TODO: make this testable?
-func VerifyOUs(validOUs []string, StatusEndpoint string, StatusOUVerify bool) martini.Handler {
+func VerifyOUs(validOUs []string, StatusEndpoint string, StatusOUVerify bool, logger *log.Entry) martini.Handler {
 	return func(res nethttp.ResponseWriter, req *nethttp.Request, c martini.Context) {
 		log.Debug("Verifying client OU")
-		if err := Verify(req, validOUs, StatusEndpoint, StatusOUVerify); err != nil {
+		if err := Verify(req, validOUs, StatusEndpoint, StatusOUVerify, logger); err != nil {
 			nethttp.Error(res, err.Error(), nethttp.StatusUnauthorized)
 		}
 	}

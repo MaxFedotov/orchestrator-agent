@@ -20,9 +20,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-
-	"github.com/outbrain/golib/log"
 )
+
+// Token is used to identify and validate requests to this service
+type Token struct {
+	Hash string
+}
 
 func GetHash(input []byte) string {
 	hasher := sha256.New()
@@ -30,26 +33,22 @@ func GetHash(input []byte) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func GetRandomData() []byte {
+func NewToken() (*Token, error) {
+	tokenRandomData, err := GetRandomData()
+	if err != nil {
+		return nil, err
+	}
+	return &Token{
+		Hash: GetHash(tokenRandomData),
+	}, nil
+}
+
+func GetRandomData() ([]byte, error) {
 	size := 64
 	rb := make([]byte, size)
 	_, err := rand.Read(rb)
 	if err != nil {
-		log.Errore(err)
-		return nil
+		return nil, err
 	}
-	return rb
-}
-
-// Token is used to identify and validate requests to this service
-type Token struct {
-	Hash string
-}
-
-var ProcessToken = NewToken()
-
-func NewToken() *Token {
-	return &Token{
-		Hash: GetHash(GetRandomData()),
-	}
+	return rb, nil
 }
