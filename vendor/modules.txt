@@ -1,0 +1,55 @@
+# github.com/BurntSushi/toml v0.3.1
+github.com/BurntSushi/toml
+# github.com/MaxFedotov/logrus-prefixed-formatter v0.5.2
+github.com/MaxFedotov/logrus-prefixed-formatter
+# github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0
+github.com/codegangsta/inject
+# github.com/github/orchestrator v3.1.4+incompatible
+github.com/github/orchestrator/go/config
+# github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
+github.com/go-martini/martini
+# github.com/go-sql-driver/mysql v1.5.0
+github.com/go-sql-driver/mysql
+# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+github.com/konsorten/go-windows-terminal-sequences
+# github.com/kr/pretty v0.2.0
+github.com/kr/pretty
+# github.com/kr/text v0.1.0
+github.com/kr/text
+# github.com/martini-contrib/auth v0.0.0-20150219114609-fa62c19b7ae8
+github.com/martini-contrib/auth
+# github.com/martini-contrib/gzip v0.0.0-20151124214156-6c035326b43f
+github.com/martini-contrib/gzip
+# github.com/martini-contrib/render v0.0.0-20150707142108-ec18f8345a11
+github.com/martini-contrib/render
+# github.com/mattn/go-colorable v0.1.4
+github.com/mattn/go-colorable
+# github.com/mattn/go-isatty v0.0.8
+github.com/mattn/go-isatty
+# github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b
+github.com/mgutz/ansi
+# github.com/openark/golib v0.0.0-20191111114742-8fd0aff957ba
+github.com/openark/golib/log
+github.com/openark/golib/sqlutils
+# github.com/outbrain/golib v0.0.0-20180830062331-ab954725f502
+github.com/outbrain/golib/log
+# github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c
+github.com/oxtoacart/bpool
+# github.com/sirupsen/logrus v1.4.2
+github.com/sirupsen/logrus
+# golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
+golang.org/x/crypto/ssh/terminal
+# golang.org/x/sys v0.0.0-20191120155948-bd437916bb0e
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+# gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
+gopkg.in/check.v1
+# gopkg.in/gcfg.v1 v1.2.3
+gopkg.in/gcfg.v1
+gopkg.in/gcfg.v1/scanner
+gopkg.in/gcfg.v1/token
+gopkg.in/gcfg.v1/types
+# gopkg.in/pipe.v2 v2.0.0-20140414041502-3c2ca4d52544
+gopkg.in/pipe.v2
+# gopkg.in/warnings.v0 v0.1.2
+gopkg.in/warnings.v0
