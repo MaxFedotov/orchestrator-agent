@@ -663,233 +663,24 @@ func (this *HttpAPI) SeedStageState(params martini.Params, r render.Render, req 
 	r.JSON(200, agent.SeedStageStatus[seedID][seedStage])
 }
 
-/*
-func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *http.Request) {
+func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-
-	if _, ok := config.Config.CustomCommands[params["cmd"]]; ok {
-		commandOutput, err := osagent.ExecCustomCmdWithOutput(params["cmd"])
+	if _, ok := agent.Config.CustomCommands[params["cmd"]]; ok {
+		commandOutput, err := cmd.CommandOutput(agent.Config.CustomCommands[params["cmd"]].Cmd, agent.Config.Common.ExecWithSudo)
 		if err != nil {
 			r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 			return
 		}
-
 		r.JSON(200, &APIResponse{Code: OK, Message: string(commandOutput)})
 		return
-	} else {
-		err := fmt.Errorf("%s : Command not found", params["cmd"])
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
 	}
+	err := fmt.Errorf("%s : Command not found", params["cmd"])
+	r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+	return
+
 }
-
-// DiskUsage returns the number of bytes of a give ndirectory (recursive)
-func (this *HttpAPI) DiskUsage(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	path := req.URL.Query().Get("path")
-
-	output, err := osagent.DiskUsage(path)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-
-// DeleteMySQLDataDir compeltely erases MySQL data directory. Use with care!
-func (this *HttpAPI) DeleteMySQLDataDir(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	err := osagent.DeleteMySQLDataDir()
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, err == nil)
-}
-
-// ListSnapshotsLogicalVolumes lists logical volumes by pattern
-func (this *HttpAPI) ListSnapshotsLogicalVolumes(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.LogicalVolumes("", config.Config.SnapshotVolumesFilter)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-// LogicalVolume lists a logical volume by name/path/mount point
-func (this *HttpAPI) LogicalVolume(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	lv := params["lv"]
-	if lv == "" {
-		lv = req.URL.Query().Get("lv")
-	}
-	output, err := osagent.LogicalVolumes(lv, "")
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-// GetMount shows the configured mount point's status
-func (this *HttpAPI) GetMount(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.GetMount(config.Config.SnapshotMountPoint)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-
-// LocalSnapshots lists dc-local available snapshots for this host
-func (this *HttpAPI) AvailableLocalSnapshots(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.AvailableSnapshots(true)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-// Snapshots lists available snapshots for this host
-func (this *HttpAPI) AvailableSnapshots(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.AvailableSnapshots(false)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-// returns rows in tail of mysql error log
-func (this *HttpAPI) MySQLErrorLogTail(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.MySQLErrorLogTail()
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-// MySQLRunning checks whether the MySQL service is up
-func (this *HttpAPI) MySQLRunning(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.MySQLRunning()
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-
-// SendMySQLSeedData
-func (this *HttpAPI) SendMySQLSeedData(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	mount, err := osagent.GetMount(config.Config.SnapshotMountPoint)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	go osagent.SendMySQLSeedData(params["targetHost"], mount.MySQLDataPath, params["seedId"])
-	r.JSON(200, err == nil)
-}
-
-// ListLogicalVolumes lists logical volumes by pattern
-func (this *HttpAPI) ListLogicalVolumes(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.LogicalVolumes("", params["pattern"])
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-// Hostname provides information on this process
-func (this *HttpAPI) Hostname(params martini.Params, r render.Render) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, hostname)
-}
-
-// MySQLDiskUsage returns the number of bytes on the MySQL datadir
-func (this *HttpAPI) MySQLDiskUsage(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	datadir, err := osagent.GetMySQLDataDir()
-
-	output, err := osagent.DiskUsage(datadir)
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-// MySQLPort returns the (heuristic) port on which MySQL executes
-func (this *HttpAPI) MySQLPort(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.GetMySQLPort()
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-// GetMySQLDataDirAvailableDiskSpace returns the number of bytes free within the MySQL datadir mount
-func (this *HttpAPI) GetMySQLDataDirAvailableDiskSpace(params martini.Params, r render.Render, req *http.Request) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output, err := osagent.GetMySQLDataDirAvailableDiskSpace()
-	if err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	r.JSON(200, output)
-}
-
-*/
 
 // RegisterRequests makes for the de-facto list of known API calls
 func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
@@ -918,29 +709,6 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/seed-stage-state/:seedID/:seedStage", this.SeedStageState)
 	m.Get("/api/post-seed-cmd/:seedID", this.postSeedCmd)
 
-	// ??
-	m.Get("/api/seed-command-completed/:seedId", this.SeedCommandCompleted)
-	m.Get("/api/seed-command-succeeded/:seedId", this.SeedCommandSucceeded)
-
-	/* TO DELETE
-	m.Get("/api/delete-mysql-datadir", this.DeleteMySQLDataDir)
-	m.Get("/api/hostname", this.Hostname)
-	m.Get("/api/mysql-du", this.MySQLDiskUsage)
-	m.Get("/api/mysql-port", this.MySQLPort)
-	m.Get("/api/mysql-datadir-available-space", this.GetMySQLDataDirAvailableDiskSpace)
-	m.Get("/api/mysql-error-log-tail", this.MySQLErrorLogTail)
-	m.Get("/api/mysql-status", this.MySQLRunning)
-	m.Get("/api/available-snapshots-local", this.AvailableLocalSnapshots) // LocalSnapshots lists dc-local available snapshots for this host
-	m.Get("/api/available-snapshots", this.AvailableSnapshots)            // Snapshots lists available snapshots for this host
-	m.Get("/api/lvs-snapshots", this.ListSnapshotsLogicalVolumes) // ListSnapshotsLogicalVolumes lists logical volumes by pattern
-	m.Get("/api/mount", this.GetMount)                            // GetMount shows the configured mount point's status
-	m.Get("/api/du", this.DiskUsage)
-	m.Get("/api/lv", this.LogicalVolume)
-	m.Get("/api/lv/:lv", this.LogicalVolume)
-	m.Get("/api/lvs", this.ListLogicalVolumes)
-	m.Get("/api/lvs/:pattern", this.ListLogicalVolumes)
-	*/
-
 	// unused
 	m.Get("/api/mysql-binlog-binary-contents", this.BinlogBinaryContents)
 	m.Get("/api/mysql-relay-log-index-file", this.RelayLogIndexFile)
@@ -952,8 +720,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/mysql-relaylog-contents-tail/:relaylog/:start", this.RelaylogContentsTail)
 	m.Post("/api/apply-relaylog-contents", this.ApplyRelaylogContents)
 
-	// to delete
-	// m.Get("/api/custom-commands/:cmd", this.RunCommand)
+	m.Get("/api/custom-commands/:cmd", this.RunCommand)
 
 	// list all the /debug/ endpoints we want
 	m.Get("/debug/pprof", pprof.Index)

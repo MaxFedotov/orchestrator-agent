@@ -33,6 +33,10 @@ type commonConfig struct {
 	StatusBadSeconds      *config.Duration `toml:"status-bad-seconds"`
 }
 
+type customCommand struct {
+	Cmd string `toml:"cmd"`
+}
+
 type orchestratorConfig struct {
 	URL        string `toml:"url"`
 	AgentsPort int    `toml:"agents-port"`
@@ -51,15 +55,16 @@ type mysqlConfig struct {
 
 // Config is used to store all configuration parameters
 type Config struct {
-	Common       commonConfig            `toml:"common"`
-	Orchestrator orchestratorConfig      `toml:"orchestrator"`
-	Logging      loggingConfig           `toml:"logging"`
-	Mysql        mysqlConfig             `toml:"mysql"`
-	MysqlDump    *seed.MysqldumpConfig   `toml:"mysqldump"`
-	Mydumper     *seed.MydumperConfig    `toml:"mydumper"`
-	Xtrabackup   *seed.XtrabackupConfig  `toml:"xtrabackup"`
-	LVM          *seed.LVMConfig         `toml:"lvm"`
-	ClonePlugin  *seed.ClonePluginConfig `toml:"clone_plugin"`
+	Common         commonConfig             `toml:"common"`
+	Orchestrator   orchestratorConfig       `toml:"orchestrator"`
+	Logging        loggingConfig            `toml:"logging"`
+	Mysql          mysqlConfig              `toml:"mysql"`
+	MysqlDump      *seed.MysqldumpConfig    `toml:"mysqldump"`
+	Mydumper       *seed.MydumperConfig     `toml:"mydumper"`
+	Xtrabackup     *seed.XtrabackupConfig   `toml:"xtrabackup"`
+	LVM            *seed.LVMConfig          `toml:"lvm"`
+	ClonePlugin    *seed.ClonePluginConfig  `toml:"clone_plugin"`
+	CustomCommands map[string]customCommand `toml:"custom-commands"`
 }
 
 // NewConfig sets default values for configuration parameters
@@ -97,6 +102,7 @@ func NewConfig() *Config {
 				Duration: 300 * time.Second,
 			},
 		},
+		CustomCommands: make(map[string]customCommand),
 		Orchestrator: orchestratorConfig{
 			URL:        "",
 			AgentsPort: 3001,
