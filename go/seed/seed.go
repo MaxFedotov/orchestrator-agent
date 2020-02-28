@@ -183,6 +183,7 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 				sm.MethodOpts.BackupSide = Target
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
 				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
+				sm.BackupFileName = "orchestrator_agent_backup.sql"
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("Mysqldump seed method unavailable")

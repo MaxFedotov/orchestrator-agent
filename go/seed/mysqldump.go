@@ -17,18 +17,15 @@ import (
 type MysqldumpSeed struct {
 	*Base
 	*MethodOpts
-	Config *MysqldumpConfig
-	Logger *log.Entry
+	Config         *MysqldumpConfig
+	Logger         *log.Entry
+	BackupFileName string
 }
 
 type MysqldumpConfig struct {
 	Enabled  bool `toml:"enabled"`
 	Compress bool `toml:"compress"`
 }
-
-const (
-	mysqlbackupFileName = "orchestrator_agent_backup.sql"
-)
 
 func (sm *MysqldumpSeed) Prepare(side Side) {
 	stage := NewSeedStage(Prepare, sm.StatusChan)
@@ -41,7 +38,7 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 	if sm.Config.Compress {
 		backupCmd += fmt.Sprintf(" -C")
 	}
-	backupCmd += fmt.Sprintf(" > %s", path.Join(sm.BackupDir, mysqlbackupFileName))
+	backupCmd += fmt.Sprintf(" > %s", path.Join(sm.BackupDir, sm.BackupFileName))
 	sm.Logger.Info("Starting backup")
 	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup")
@@ -58,7 +55,7 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 
 func (sm *MysqldumpSeed) Restore() {
 	stage := NewSeedStage(Restore, sm.StatusChan)
-	restoreCmd := fmt.Sprintf("cat %s | mysql -u%s -p%s --port %d", path.Join(sm.BackupDir, mysqlbackupFileName), sm.SeedUser, sm.SeedPassword, sm.MySQLPort)
+	restoreCmd := fmt.Sprintf("cat %s | mysql -u%s -p%s --port %d", path.Join(sm.BackupDir, sm.BackupFileName), sm.SeedUser, sm.SeedPassword, sm.MySQLPort)
 	sm.Logger.Info("Starting restore")
 	err := cmd.CommandRunWithFunc(restoreCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running restore")
@@ -74,7 +71,7 @@ func (sm *MysqldumpSeed) Restore() {
 
 func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
 	meta := &SeedMetadata{}
-	file, err := os.Open(path.Join(sm.BackupDir, mysqlbackupFileName))
+	file, err := os.Open(path.Join(sm.BackupDir, sm.BackupFileName))
 	if err != nil {
 		return meta, err
 	}
@@ -100,7 +97,7 @@ func (sm *MysqldumpSeed) Cleanup(side Side) {
 	stage := NewSeedStage(Cleanup, sm.StatusChan)
 	sm.Logger.Info("Starting cleanup")
 	if side == Target {
-		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, mysqlbackupFileName))
+		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFileName))
 		err := cmd.CommandRunWithFunc(cleanupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Running cleanup")
 		})
