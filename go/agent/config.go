@@ -95,7 +95,7 @@ func NewConfig() *Config {
 			TokenHintFile:     "",
 			TokenHTTPHeader:   "",
 			ExecWithSudo:      false,
-			BackupDir:         "",
+			BackupDir:         "", // directory to put backup or mount snapshot
 			PostSeedCommand:   "",
 			StatusEndpoint:    "/api/status",
 			StatusBadSeconds: &config.Duration{
@@ -137,7 +137,6 @@ func NewConfig() *Config {
 			AvailableLocalSnapshotHostsCommand: "",
 			AvailableSnapshotHostsCommand:      "",
 			SnapshotVolumesFilter:              "",
-			SnapshotMountPoint:                 "",
 		},
 		ClonePlugin: &seed.ClonePluginConfig{
 			Enabled: false,

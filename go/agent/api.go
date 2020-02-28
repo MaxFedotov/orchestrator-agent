@@ -96,7 +96,7 @@ func (this *HttpAPI) MountLV(params martini.Params, r render.Render, req *http.R
 	if lv == "" {
 		lv = req.URL.Query().Get("lv")
 	}
-	output, err := osagent.MountLV(agent.Config.LVM.SnapshotMountPoint, lv, agent.Config.Common.ExecWithSudo)
+	output, err := osagent.MountLV(agent.Config.Common.BackupDir, lv, agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -126,7 +126,7 @@ func (this *HttpAPI) Unmount(params martini.Params, r render.Render, req *http.R
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	output, err := osagent.Unmount(agent.Config.LVM.SnapshotMountPoint, agent.Config.Common.ExecWithSudo)
+	output, err := osagent.Unmount(agent.Config.Common.BackupDir, agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -183,24 +183,6 @@ func (this *HttpAPI) MySQLErrorLogTail(params martini.Params, r render.Render, r
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	r.JSON(200, output)
-}
-
-// SeedCommandCompleted
-func (this *HttpAPI) SeedCommandCompleted(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output := osagent.SeedCommandCompleted(params["seedId"])
-	r.JSON(200, output)
-}
-
-// SeedCommandCompleted
-func (this *HttpAPI) SeedCommandSucceeded(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	output := osagent.SeedCommandSucceeded(params["seedId"])
 	r.JSON(200, output)
 }
 

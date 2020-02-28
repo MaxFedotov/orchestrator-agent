@@ -189,7 +189,7 @@ func (agent *Agent) Start() error {
 	}
 	agentToken, err := token.NewToken()
 	if err != nil {
-		return fmt.Errorf("Unable to generate toek for agent: %+v", err)
+		return fmt.Errorf("Unable to generate token for agent: %+v", err)
 	}
 	agent.Info.Token = agentToken.Hash
 	if agent.Config.Common.TokenHintFile != "" {
@@ -204,6 +204,16 @@ func (agent *Agent) Start() error {
 	agent.MySQLClient, err = dbagent.NewMySQLClient(agent.Config.Mysql.SeedUser, agent.Config.Mysql.SeedPassword, agent.Config.Mysql.Port)
 	if err != nil {
 		return fmt.Errorf("Unable to connect to MySQL: %+v", err)
+	}
+	agent.MySQLDatadir, err = dbagent.GetMySQLDatadir(agent.MySQLClient)
+	if err != nil {
+		return fmt.Errorf("Unable to get MySQL datadir path: %+v", err)
+	}
+	if err := osagent.CheckPermissionsOnFolder(agent.Config.Common.BackupDir, agent.Config.Common.ExecWithSudo); err != nil {
+		return fmt.Errorf("Agent don't have permissions on backup directory %s", agent.Config.Common.BackupDir)
+	}
+	if err := osagent.CheckPermissionsOnFolder(agent.MySQLDatadir, agent.Config.Common.ExecWithSudo); err != nil {
+		return fmt.Errorf("Agent don't have permissions on MySQL data directory %s", agent.MySQLDatadir)
 	}
 	agent.StatusChan = make(chan *seed.SeedStageState)
 	seedBaseConfig := seed.Base{
@@ -302,10 +312,6 @@ func (agent *Agent) Start() error {
 	}
 	agent.AvailiableSeedMethods = availiableSeedMethods
 	agent.SeedMethods = seedMethods
-	agent.MySQLDatadir, err = dbagent.GetMySQLDatadir(agent.MySQLClient)
-	if err != nil {
-		return fmt.Errorf("Unable to get MySQL datadir path: %+v", err)
-	}
 	go agent.ContinuousOperation()
 	go agent.ServeHTTP()
 	go agent.UpdateSeedStatus()
@@ -316,6 +322,7 @@ func (agent *Agent) UpdateSeedStatus() {
 	for {
 		select {
 		case seedStatus := <-agent.StatusChan:
+			seedStatus.SeedID = agent.ActiveSeed.SeedID
 			agent.Lock()
 			seetStageStatus := make(map[seed.Stage]*seed.SeedStageState)
 			seetStageStatus[seedStatus.Stage] = seedStatus
@@ -460,7 +467,7 @@ func (agent *Agent) GetAgentData() *Data {
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get logical volumes info")
 	}
-	agentData.MountPoint, err = osagent.GetMount(agent.Config.LVM.SnapshotMountPoint, agent.Config.Common.ExecWithSudo)
+	agentData.MountPoint, err = osagent.GetMount(agent.Config.Common.BackupDir, agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get snapshot mount point info")
 	}
