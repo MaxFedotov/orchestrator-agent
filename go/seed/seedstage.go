@@ -58,6 +58,7 @@ func (s Status) MarshalJSON() ([]byte, error) {
 }
 
 type SeedStageState struct {
+	SeedID     int64
 	Stage      Stage
 	Hostname   string
 	Timestamp  time.Time
