@@ -1,6 +1,6 @@
 #!/bin/sh
-getent group orchestrator-agent >/dev/null || groupadd -r orchestrator-agent
-getent passwd orchestrator-agent >/dev/null || \
-    useradd -r -g orchestrator-agent -s /sbin/nologin \
-    -c "Orchestrator-agent service" orchestrator-agent
+getent group mysql >/dev/null || groupadd -r mysql
+getent passwd mysql >/dev/null || \
+    useradd -r -g mysql -s /bin/bash \
+    -c "MySQL server" mysql
 exit 0

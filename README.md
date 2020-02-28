@@ -1,3 +1,6 @@
+++ NOTES ABOUT RUNNING AGENT UNDER MYSQL ACCOUNT
+++ BACKUP_DIR = SNAPSHOT_MOUNT_POINT
+
 orchestrator-agent
 ==================
 
