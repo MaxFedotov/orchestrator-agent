@@ -59,22 +59,24 @@ func GetSnapshotHosts(snapshotHostsCmd string, execWithSudo bool) ([]string, err
 }
 
 func GetLogicalVolumes(volumeName string, filterPattern string, execWithSudo bool) ([]*LogicalVolume, error) {
+	logicalVolumes := []*LogicalVolume{}
 	output, err := cmd.CommandOutput(fmt.Sprintf("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent %s", volumeName), execWithSudo)
 	if err != nil {
-		return nil, err
+		return logicalVolumes, err
 	}
 	tokens := cmd.OutputTokens(`[ \t]+`, output)
-	logicalVolumes := []*LogicalVolume{}
-	for _, lineTokens := range tokens {
-		logicalVolume := &LogicalVolume{
-			Name:      lineTokens[1],
-			GroupName: lineTokens[2],
-			Path:      lineTokens[3],
-		}
-		logicalVolume.SnapshotPercent, err = strconv.ParseFloat(lineTokens[4], 32)
-		logicalVolume.IsSnapshot = (err == nil)
-		if strings.Contains(logicalVolume.Name, filterPattern) {
-			logicalVolumes = append(logicalVolumes, logicalVolume)
+	if len(tokens[0][0]) > 0 {
+		for _, lineTokens := range tokens {
+			logicalVolume := &LogicalVolume{
+				Name:      lineTokens[1],
+				GroupName: lineTokens[2],
+				Path:      lineTokens[3],
+			}
+			logicalVolume.SnapshotPercent, err = strconv.ParseFloat(lineTokens[4], 32)
+			logicalVolume.IsSnapshot = (err == nil)
+			if strings.Contains(logicalVolume.Name, filterPattern) {
+				logicalVolumes = append(logicalVolumes, logicalVolume)
+			}
 		}
 	}
 	return logicalVolumes, nil
