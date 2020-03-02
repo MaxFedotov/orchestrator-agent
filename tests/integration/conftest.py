@@ -3,7 +3,7 @@ import os
 import vagrant
 import subprocess
 import sys
-from pathlib import Path
+from os import path
 import shutil
 
 def pytest_addoption(parser):
@@ -38,7 +38,7 @@ def prepare_env(pytestconfig):
         "targetagent": None
     }
     hosts_records = []
-    vagrantPath = os.path.join(os.getcwd(), "vagrantfiles/mysql_{}/".format(pytestconfig.getoption("mysql_version")))
+    vagrantPath = os.path.join(os.getcwd(), "vagrant/vagrantfiles/mysql_{}/".format(pytestconfig.getoption("mysql_version")))
     print("Will use vagrant file: {}".format(vagrantPath))
     print("Will use {} repo {} branch for Orchestrator".format(pytestconfig.getoption("orch_repo"), pytestconfig.getoption("orch_branch")))
     for index, host in enumerate(vagrant_hosts):
@@ -55,11 +55,11 @@ def prepare_env(pytestconfig):
         prepare_orchestrator(vagrant_hosts["orchestrator"], pytestconfig.getoption("orch_repo"), pytestconfig.getoption("orch_branch"))
     
     print("Building orchestrator-agent packages")
-    parent_dir = Path(os.getcwd()).parent
-    process = subprocess.Popen(["goreleaser", "--snapshot" ,"--rm-dist"], cwd=parent_dir, stdout=sys.stdout)
+    orchestrator_dir = path.abspath(path.join(os.getcwd(),"../../"))
+    process = subprocess.Popen(["goreleaser", "--snapshot" ,"--rm-dist"], cwd=orchestrator_dir, stdout=sys.stdout)
     process.wait()
-    os.popen("rm -rf $(find vagrant -name 'orchestrator-agent*.rpm')")
-    os.popen("cp -f $(find {} -name 'orchestrator-agent*.rpm' | grep -v sysv) vagrant".format(parent_dir))
+    os.popen("rm -rf $(find vagrant/shared -name 'orchestrator-agent*.rpm')")
+    os.popen("cp $(find {} -name 'orchestrator-agent*.rpm' | grep -v sysv) vagrant/shared".format(orchestrator_dir))
 
     server_id = 2
     for host, box in vagrant_hosts.items():
@@ -106,11 +106,14 @@ def prepare_orchestrator(orchestrator, repo, branch):
 
 
 def prepare_agent(agent, update_agent,server_id):
-    if update_agent: 
-        print(agent.ssh(command="sudo yum reinstall -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
+    if update_agent:
+        print(agent.ssh(command="sudo yum -y erase orchestrator-agent.x86_64"))
     else:
-        print(agent.ssh(command="sudo yum install -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
         agent.ssh(command="sudo bash -c \"echo 'mysql ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers\"")
         agent.ssh(command="sudo bash -c \"echo 'mysql ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers\"")
-    agent.ssh(command="sudo bash -c \"grep -rli /etc/my.cnf -e 'server_id = 1' |  xargs -i@ sed -i 's/server_id = 1/server_id = {}/g' @\"".format(server_id))
+        agent.ssh(command="sudo bash -c \"grep -rli /etc/my.cnf -e 'server_id = 1' |  xargs -i@ sed -i 's/server_id = 1/server_id = {}/g' @\"".format(server_id))
+        agent.ssh(command="sudo rm -rf /var/lib/mysql/auto.cnf")
+        agent.ssh(command="sudo service mysql restart")
+    print(agent.ssh(command="sudo yum install -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
+    agent.ssh(command="sudo cp /vagrant/orchestrator-agent.conf /etc && sudo chown mysql:mysql /etc/orchestrator-agent.conf")
     agent.ssh(command="sudo service orchestrator-agent start")

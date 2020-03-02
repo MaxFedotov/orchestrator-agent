@@ -42,7 +42,7 @@ func (s *MysqldumpTestSuite) TestGetMetadataPositional(c *C) {
 	}
 	mysqldump := &seed.MysqldumpSeed{
 		Base:           baseConfig,
-		BackupFileName: "orchestrator_agent_backup.sql",
+		BackupFileName: "orchestrator_agent_backup_positional.sql",
 	}
 	seedMetadata := &seed.SeedMetadata{
 		LogFile: "mysql-bin.000005",

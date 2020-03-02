@@ -1,20 +1,28 @@
 import vagrant
 import os
 import pytest
+import time
+import json
+import pprint
 
-def test_orchestrator(prepare_env):
-    stdout = prepare_env["orchestrator"].ssh(command="mysql -BNe 'show databases;'")
-    print(stdout)
-    assert stdout != ""
-
-def test_sourceAgent(prepare_env):
-    stdout = prepare_env["sourceagent"].ssh(command="mysql -BNe 'show databases;'")
-    print(stdout)
-    assert stdout != ""
-
-def test_targetAgent(prepare_env):
-    stdout = prepare_env["targetagent"].ssh(command="mysql -BNe 'show databases;'")
-    print(stdout)
-    assert stdout != ""
-
-
+def test_mysqldump(prepare_env):
+    sleep_interval_sec = 60
+    seedID = prepare_env["orchestrator"].ssh(command="curl -X GET http://localhost:3000/api/agent-seed/Mysqldump/targetagent/sourceagent")
+    print(seedID)
+    assert seedID != ""
+    while True:
+        seed_status = {}
+        seed_states = {}
+        seed_status = json.loads(prepare_env["orchestrator"].ssh(command="curl -X GET http://localhost:3000/api/agent-seed-details/{}".format(int(seedID))))
+        print("SEED STATUS:")
+        pprint.pprint(seed_status)
+        assert seed_status["Status"] != "Failed"
+        seed_states = json.loads(prepare_env["orchestrator"].ssh(command="curl -X GET http://localhost:3000/api/agent-seed-states/{}".format(int(seedID))))
+        print("SEED STATES FOR STAGE:")
+        for seed_state in seed_states:
+            if seed_state["Stage"] == seed_status["Stage"]:
+                pprint.pprint(seed_state)
+        if seed_status["Status"] == "Completed":
+            break
+        print("SLEEPING {} sec".format(sleep_interval_sec))
+        time.sleep(sleep_interval_sec)

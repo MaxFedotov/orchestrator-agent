@@ -58,32 +58,30 @@ func (s Status) MarshalJSON() ([]byte, error) {
 }
 
 type SeedStageState struct {
-	SeedID     int64
-	Stage      Stage
-	Hostname   string
-	Timestamp  time.Time
-	Status     Status
-	Details    string
-	Command    *pipe.State          `json:"-"`
-	StatusChan chan *SeedStageState `json:"-"`
+	SeedID    int64
+	Stage     Stage
+	Hostname  string
+	Timestamp time.Time
+	Status    Status
+	Details   string
+	Command   *pipe.State `json:"-"`
 }
 
 func NewSeedStage(stage Stage, statusChan chan *SeedStageState) *SeedStageState {
 	seedStageState := &SeedStageState{
-		Stage:      stage,
-		Timestamp:  time.Now(),
-		Status:     Running,
-		StatusChan: statusChan,
+		Stage:     stage,
+		Timestamp: time.Now(),
+		Status:    Running,
 	}
 	seedStageState.Hostname, _ = os.Hostname()
-	seedStageState.StatusChan <- seedStageState
+	statusChan <- seedStageState
 	return seedStageState
 }
 
-func (s *SeedStageState) UpdateSeedStatus(status Status, command *pipe.State, details string) {
+func (s *SeedStageState) UpdateSeedStatus(status Status, command *pipe.State, details string, statusChan chan *SeedStageState) {
 	s.Status = status
 	s.Command = command
 	s.Details = details
 	s.Timestamp = time.Now()
-	s.StatusChan <- s
+	statusChan <- s
 }

@@ -644,6 +644,24 @@ func (this *HttpAPI) SeedStageState(params martini.Params, r render.Render, req 
 	r.JSON(200, agent.SeedStageStatus[seedID][seedStage])
 }
 
+func (this *HttpAPI) SeedStages(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req, agent); err != nil {
+		return
+	}
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
+	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err, "seedID": params["seedID"]}).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if _, ok := agent.SeedStageStatus[seedID]; !ok {
+		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"]}).Error("Cannot found seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: fmt.Sprintf("SeedID %d not found", seedID)})
+		return
+	}
+	r.JSON(200, agent.SeedStageStatus[seedID])
+}
+
 func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
@@ -688,6 +706,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/get-metadata/:seedID/:seedMethod", this.GetMetadata)
 	m.Get("/api/abort-seed-stage/:seedID/:seedStage", this.AbortSeedStage)
 	m.Get("/api/seed-stage-state/:seedID/:seedStage", this.SeedStageState)
+	m.Get("/api/seed-stage-state/:seedID", this.SeedStages)
 	m.Get("/api/post-seed-cmd/:seedID", this.postSeedCmd)
 
 	// unused

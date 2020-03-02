@@ -29,7 +29,7 @@ type MysqldumpConfig struct {
 
 func (sm *MysqldumpSeed) Prepare(side Side) {
 	stage := NewSeedStage(Prepare, sm.StatusChan)
-	stage.UpdateSeedStatus(Completed, nil, "Stage completed")
+	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 }
 
 func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
@@ -41,15 +41,15 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 	backupCmd += fmt.Sprintf(" > %s", path.Join(sm.BackupDir, sm.BackupFileName))
 	sm.Logger.Info("Starting backup")
 	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
-		stage.UpdateSeedStatus(Running, cmd, "Running backup")
+		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
 	})
 	if err != nil {
-		stage.UpdateSeedStatus(Error, nil, err.Error())
+		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 		sm.Logger.WithField("error", err).Info("Backup failed")
 		return
 	}
 	sm.Logger.Info("Backup completed")
-	stage.UpdateSeedStatus(Completed, nil, "Stage completed")
+	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 
 }
 
@@ -58,15 +58,15 @@ func (sm *MysqldumpSeed) Restore() {
 	restoreCmd := fmt.Sprintf("cat %s | mysql -u%s -p%s --port %d", path.Join(sm.BackupDir, sm.BackupFileName), sm.SeedUser, sm.SeedPassword, sm.MySQLPort)
 	sm.Logger.Info("Starting restore")
 	err := cmd.CommandRunWithFunc(restoreCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
-		stage.UpdateSeedStatus(Running, cmd, "Running restore")
+		stage.UpdateSeedStatus(Running, cmd, "Running restore", sm.StatusChan)
 	})
 	if err != nil {
-		stage.UpdateSeedStatus(Error, nil, err.Error())
+		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 		sm.Logger.WithField("error", err).Info("Restore failed")
 		return
 	}
 	sm.Logger.Info("Restore completed")
-	stage.UpdateSeedStatus(Completed, nil, "Stage completed")
+	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 }
 
 func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
@@ -99,16 +99,16 @@ func (sm *MysqldumpSeed) Cleanup(side Side) {
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFileName))
 		err := cmd.CommandRunWithFunc(cleanupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
-			stage.UpdateSeedStatus(Running, cmd, "Running cleanup")
+			stage.UpdateSeedStatus(Running, cmd, "Running cleanup", sm.StatusChan)
 		})
 		if err != nil {
-			stage.UpdateSeedStatus(Error, nil, err.Error())
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 			sm.Logger.WithField("error", err).Info("Cleanup failed")
 			return
 		}
 	}
 	sm.Logger.Info("Cleanup completed")
-	stage.UpdateSeedStatus(Completed, nil, "Stage completed")
+	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 }
 
 func (sm *MysqldumpSeed) isAvailable() bool {

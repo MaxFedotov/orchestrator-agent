@@ -2,7 +2,7 @@ Vagrant.configure("2") do |config|
     config.vm.box = "MaxFedotov/orchestrator-agent-test-percona57"
     config.vm.box_version = "0.0.2"
     config.vm.define ENV["hostname"] do |host|
-        host.vm.synced_folder "../../vagrant/", "/vagrant", type: "nfs"
+        host.vm.synced_folder "../../shared/", "/vagrant", type: "nfs"
         host.vm.provider "virtualbox" do |vb|
             vb.memory = "512"
             vb.cpus = 2
