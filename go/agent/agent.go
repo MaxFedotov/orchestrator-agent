@@ -54,7 +54,6 @@ type Agent struct {
 	Logger                *log.Entry
 	StatusChan            chan *seed.SeedStageState
 	SeedMethods           map[seed.Method]seed.Plugin
-	SeedStageStatus       map[int64]map[seed.Stage]*seed.SeedStageState
 	ActiveSeed            *ActiveSeed
 	sync.RWMutex
 }
@@ -67,9 +66,12 @@ type Info struct {
 }
 
 type ActiveSeed struct {
-	SeedID int64
-	Stage  seed.Stage
-	Status seed.Status
+	SeedID        int64
+	SeedStatus    seed.Status
+	Method        seed.Method
+	Side          seed.Side
+	Stage         seed.Stage
+	StagesDetails map[seed.Stage]*seed.SeedStageState
 }
 
 type Data struct {
@@ -79,6 +81,7 @@ type Data struct {
 	MountPoint            *osagent.Mount           // pass by reference ??
 	BackupDir             string
 	BackupDirDiskFree     int64
+	BackupDirDiskUsed     int64
 	MySQLRunning          bool
 	MySQLDatadir          string
 	MySQLDatadirDiskUsed  int64
@@ -232,9 +235,7 @@ func (agent *Agent) Start() error {
 	}
 	seedMethods := make(map[seed.Method]seed.Plugin)
 	availiableSeedMethods := make(map[seed.Method]*seed.MethodOpts)
-	seedStageStatus := make(map[int64]map[seed.Stage]*seed.SeedStageState)
 	agent.ActiveSeed = &ActiveSeed{}
-	agent.SeedStageStatus = seedStageStatus
 	if agent.Config.LVM.Enabled {
 		lvm, lvmOpts, err := seed.New(
 			seed.LVM,
@@ -324,10 +325,11 @@ func (agent *Agent) UpdateSeedStatus() {
 		case seedStatus := <-agent.StatusChan:
 			seedStatus.SeedID = agent.ActiveSeed.SeedID
 			agent.Lock()
-			seetStageStatus := make(map[seed.Stage]*seed.SeedStageState)
-			seetStageStatus[seedStatus.Stage] = seedStatus
-			agent.SeedStageStatus[agent.ActiveSeed.SeedID] = seetStageStatus
-			agent.ActiveSeed.Status = seedStatus.Status
+			agent.ActiveSeed.StagesDetails[seedStatus.Stage] = seedStatus
+			// Last stage is Cleanup, so if it is Completed - seed is Completed
+			if seedStatus.Stage == seed.Cleanup && seedStatus.Status == seed.Completed {
+				agent.ActiveSeed.SeedStatus = seed.Completed
+			}
 			agent.Unlock()
 		}
 	}
@@ -476,6 +478,10 @@ func (agent *Agent) GetAgentData() *Data {
 	agentData.BackupDirDiskFree, err = osagent.GetFSStatistics(agent.Config.Common.BackupDir, osagent.Free)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get backup directory free space info")
+	}
+	agentData.BackupDirDiskUsed, err = osagent.GetDiskUsage(agent.Config.Common.BackupDir, agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get MySQL backup directory used space info")
 	}
 	agentData.MySQLRunning, err = osagent.MySQLRunning(agent.Config.Common.ExecWithSudo)
 	if err != nil {

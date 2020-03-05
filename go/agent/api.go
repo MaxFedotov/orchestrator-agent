@@ -357,6 +357,7 @@ func (this *HttpAPI) Prepare(params martini.Params, r render.Render, req *http.R
 	var seedMethod seed.Method
 	var seedSide seed.Side
 	var ok bool
+	seedStage := seed.Prepare
 	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
@@ -378,14 +379,18 @@ func (this *HttpAPI) Prepare(params martini.Params, r render.Render, req *http.R
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed side undefinded"})
 		return
 	}
-	if agent.ActiveSeed.SeedID == seedID && agent.ActiveSeed.Stage == seed.Prepare && (agent.ActiveSeed.Status == seed.Running || agent.ActiveSeed.Status == seed.Completed) {
-		r.Text(202, "Prepare stage already started for seed")
+	if agent.ActiveSeed.SeedID == seedID && agent.ActiveSeed.Stage == seedStage && (agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Running || agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Completed) {
+		r.Text(202, fmt.Sprintf("%s stage already started for seed", seedStage.String()))
 	}
+	seedStagesDetails := make(map[seed.Stage]*seed.SeedStageState)
 	agent.Lock()
-	defer agent.Unlock()
 	agent.ActiveSeed.SeedID = seedID
-	agent.ActiveSeed.Stage = seed.Prepare
-	agent.ActiveSeed.Status = seed.Running
+	agent.ActiveSeed.Stage = seedStage
+	agent.ActiveSeed.SeedStatus = seed.Running
+	agent.ActiveSeed.Side = seedSide
+	agent.ActiveSeed.Method = seedMethod
+	agent.ActiveSeed.StagesDetails = seedStagesDetails
+	agent.Unlock()
 	go agent.SeedMethods[seedMethod].Prepare(seedSide)
 	r.Text(202, "Started")
 }
@@ -397,6 +402,7 @@ func (this *HttpAPI) Backup(params martini.Params, r render.Render, req *http.Re
 	}
 	var seedMethod seed.Method
 	var ok bool
+	seedStage := seed.Backup
 	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
@@ -425,12 +431,12 @@ func (this *HttpAPI) Backup(params martini.Params, r render.Render, req *http.Re
 		return
 	}
 	seedHost := params["seedHost"]
-	if agent.ActiveSeed.Stage == seed.Backup && (agent.ActiveSeed.Status == seed.Running || agent.ActiveSeed.Status == seed.Completed) {
-		r.Text(202, "Backup stage already started for seed")
+	if agent.ActiveSeed.SeedID == seedID && agent.ActiveSeed.Stage == seedStage && (agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Running || agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Completed) {
+		r.Text(202, fmt.Sprintf("%s stage already started for seed", seedStage.String()))
 	}
 	agent.Lock()
-	defer agent.Unlock()
-	agent.ActiveSeed.Stage = seed.Backup
+	agent.ActiveSeed.Stage = seedStage
+	agent.Unlock()
 	go agent.SeedMethods[seedMethod].Backup(seedHost, mysqlPort)
 	r.Text(202, "Started")
 }
@@ -442,6 +448,7 @@ func (this *HttpAPI) Restore(params martini.Params, r render.Render, req *http.R
 	}
 	var seedMethod seed.Method
 	var ok bool
+	seedStage := seed.Restore
 	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
@@ -463,57 +470,13 @@ func (this *HttpAPI) Restore(params martini.Params, r render.Render, req *http.R
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
 		return
 	}
-	if agent.ActiveSeed.Stage == seed.Restore && (agent.ActiveSeed.Status == seed.Running || agent.ActiveSeed.Status == seed.Completed) {
-		r.Text(202, "Restore stage already started for seed")
+	if agent.ActiveSeed.SeedID == seedID && agent.ActiveSeed.Stage == seedStage && (agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Running || agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Completed) {
+		r.Text(202, fmt.Sprintf("%s stage already started for seed", seedStage.String()))
 	}
 	agent.Lock()
-	defer agent.Unlock()
-	agent.ActiveSeed.Stage = seed.Restore
+	agent.ActiveSeed.Stage = seedStage
+	agent.Unlock()
 	go agent.SeedMethods[seedMethod].Restore()
-	r.Text(202, "Started")
-}
-
-// Cleanup starts Cleanup stage for seed
-func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	var seedMethod seed.Method
-	var seedSide seed.Side
-	var ok bool
-	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
-	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	if seedID != agent.ActiveSeed.SeedID {
-		agent.Logger.WithField("seedID", seedID).Error("Unable to start cleanup stage. SeedID not found")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start cleanup stage. SeedID not found"})
-		return
-	}
-	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
-		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method undefinded")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method undefinded"})
-		return
-	}
-	if _, ok = agent.AvailiableSeedMethods[seedMethod]; !ok {
-		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method unavailiable on agent")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
-		return
-	}
-	if seedSide, ok = seed.ToSide[params["seedSide"]]; !ok {
-		agent.Logger.WithField("seedSide", params["seedSide"]).Error("Seed side undefinded")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed side undefinded"})
-		return
-	}
-	if agent.ActiveSeed.Stage == seed.Cleanup && (agent.ActiveSeed.Status == seed.Running || agent.ActiveSeed.Status == seed.Completed) {
-		r.Text(202, "Restore stage already started for seed")
-	}
-	agent.Lock()
-	defer agent.Unlock()
-	agent.ActiveSeed.Stage = seed.Cleanup
-	go agent.SeedMethods[seedMethod].Cleanup(seedSide)
 	r.Text(202, "Started")
 }
 
@@ -524,6 +487,7 @@ func (this *HttpAPI) GetMetadata(params martini.Params, r render.Render, req *ht
 	}
 	var seedMethod seed.Method
 	var ok bool
+	seedStage := seed.ConnectSlave
 	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
@@ -552,10 +516,54 @@ func (this *HttpAPI) GetMetadata(params martini.Params, r render.Render, req *ht
 		return
 	}
 	agent.Lock()
-	defer agent.Unlock()
-	agent.ActiveSeed.Stage = seed.ConnectSlave
-	agent.ActiveSeed.Status = seed.Completed
+	agent.ActiveSeed.Stage = seedStage
+	agent.Unlock()
 	r.JSON(200, metadata)
+}
+
+// Cleanup starts Cleanup stage for seed
+func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req, agent); err != nil {
+		return
+	}
+	var seedMethod seed.Method
+	var seedSide seed.Side
+	var ok bool
+	seedStage := seed.Cleanup
+	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to parse seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+		return
+	}
+	if seedID != agent.ActiveSeed.SeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to start cleanup stage. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to start cleanup stage. SeedID not found"})
+		return
+	}
+	if seedMethod, ok = seed.ToMethod[params["seedMethod"]]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method undefinded"})
+		return
+	}
+	if _, ok = agent.AvailiableSeedMethods[seedMethod]; !ok {
+		agent.Logger.WithField("seedMethod", params["seedMethod"]).Error("Seed method unavailiable on agent")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed method unavailiable on agent"})
+		return
+	}
+	if seedSide, ok = seed.ToSide[params["seedSide"]]; !ok {
+		agent.Logger.WithField("seedSide", params["seedSide"]).Error("Seed side undefinded")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed side undefinded"})
+		return
+	}
+	if agent.ActiveSeed.SeedID == seedID && agent.ActiveSeed.Stage == seedStage && (agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Running || agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Completed) {
+		r.Text(202, fmt.Sprintf("%s stage already started for seed", seedStage.String()))
+	}
+	agent.Lock()
+	agent.ActiveSeed.Stage = seedStage
+	agent.Unlock()
+	go agent.SeedMethods[seedMethod].Cleanup(seedSide)
+	r.Text(202, "Started")
 }
 
 // postSeedCmd executes PostSeedCommand from config after seed will be completed
@@ -605,17 +613,20 @@ func (this *HttpAPI) AbortSeedStage(params martini.Params, r render.Render, req 
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed stage undefinded"})
 		return
 	}
-	agent.Lock()
-	defer agent.Unlock()
-	if agent.SeedStageStatus[seedID][seedStage].Status != seed.Running || agent.SeedStageStatus[seedID][seedStage].Command == nil {
-		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Unable to abort seed. Seed not running")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seed. Seed not running"})
+	if seedID != agent.ActiveSeed.SeedID {
+		agent.Logger.WithField("seedID", seedID).Error("Unable to abort seed stage. SeedID not found")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seed stage. SeedID not found"})
 		return
 	}
 	agent.Lock()
 	defer agent.Unlock()
-	agent.SeedStageStatus[seedID][seedStage].Command.Kill()
-	agent.ActiveSeed.Status = seed.Cancelled
+	if agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Running || agent.ActiveSeed.StagesDetails[seedStage].Command == nil {
+		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Unable to abort seed. Seed not running")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seed. Seed not running"})
+		return
+	}
+	agent.ActiveSeed.StagesDetails[seedStage].Command.Kill()
+	agent.ActiveSeed.SeedStatus = seed.Cancelled
 	r.Text(200, "killed")
 }
 
@@ -636,30 +647,24 @@ func (this *HttpAPI) SeedStageState(params martini.Params, r render.Render, req 
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Seed stage undefinded"})
 		return
 	}
-	if _, ok := agent.SeedStageStatus[seedID][seedStage]; !ok {
-		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Cannot found seedStage for seedID")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: fmt.Sprintf("SeedID %d on stage %s not found", seedID, seedStage)})
-		return
-	}
-	r.JSON(200, agent.SeedStageStatus[seedID][seedStage])
-}
-
-func (this *HttpAPI) SeedStages(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
-	if err := this.validateToken(r, req, agent); err != nil {
-		return
-	}
-	seedID, err := strconv.ParseInt(params["seedID"], 10, 64)
-	if err != nil {
-		agent.Logger.WithFields(log.Fields{"error": err, "seedID": params["seedID"]}).Error("Unable to parse seedID")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
-		return
-	}
-	if _, ok := agent.SeedStageStatus[seedID]; !ok {
+	if seedID != agent.ActiveSeed.SeedID {
 		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"]}).Error("Cannot found seedID")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: fmt.Sprintf("SeedID %d not found", seedID)})
 		return
 	}
-	r.JSON(200, agent.SeedStageStatus[seedID])
+	if _, ok := agent.ActiveSeed.StagesDetails[seedStage]; !ok {
+		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Cannot found seedStage for seedID")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: fmt.Sprintf("SeedID %d on stage %s not found", seedID, seedStage)})
+		return
+	}
+	r.JSON(200, agent.ActiveSeed.StagesDetails[seedStage])
+}
+
+func (this *HttpAPI) ActiveSeed(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	if err := this.validateToken(r, req, agent); err != nil {
+		return
+	}
+	r.JSON(200, agent.ActiveSeed)
 }
 
 func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
@@ -706,7 +711,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	m.Get("/api/get-metadata/:seedID/:seedMethod", this.GetMetadata)
 	m.Get("/api/abort-seed-stage/:seedID/:seedStage", this.AbortSeedStage)
 	m.Get("/api/seed-stage-state/:seedID/:seedStage", this.SeedStageState)
-	m.Get("/api/seed-stage-state/:seedID", this.SeedStages)
+	m.Get("/api/active-seed", this.ActiveSeed)
 	m.Get("/api/post-seed-cmd/:seedID", this.postSeedCmd)
 
 	// unused
