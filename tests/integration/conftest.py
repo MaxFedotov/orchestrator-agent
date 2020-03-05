@@ -16,6 +16,26 @@ def pytest_addoption(parser):
 def pytest_configure():
     pytest.vagrant_hosts = None
 
+@pytest.fixture(scope="module")
+def enable_gtid():
+    for host, box in pytest.vagrant_hosts.items():
+        if 'source' in host.lower():
+            print("Enabling gtid {}".format(host))
+            box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON && sudo service mysql restart")
+            box.ssh(command="mysql sakila -BNe \"UPDATE actor set first_name='test' WHERE actor_id = 1\"")
+        if 'target' in host.lower():
+            print("Enabling gtid {}".format(host))
+            box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON && sudo service mysql restart")
+
+
+@pytest.fixture(scope="module")
+def disable_gtid():
+    for host, box in pytest.vagrant_hosts.items():
+        if 'agent' in host.lower():
+            print("Disabling gtid {}".format(host))
+            box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency && sudo service mysql restart")
+        
+
 @pytest.fixture(autouse=True)
 def reset_target_agent():
     for host, box in pytest.vagrant_hosts.items():
@@ -114,6 +134,8 @@ def prepare_agent(agent, update_agent,server_id):
         agent.ssh(command="sudo bash -c \"grep -rli /etc/my.cnf -e 'server_id = 1' |  xargs -i@ sed -i 's/server_id = 1/server_id = {}/g' @\"".format(server_id))
         agent.ssh(command="sudo rm -rf /var/lib/mysql/auto.cnf")
         agent.ssh(command="sudo service mysql restart")
+        agent.ssh(command="sudo yum install -y epel-release")
+        agent.ssh(command="sudo yum install -y crudini")
     print(agent.ssh(command="sudo yum install -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
     agent.ssh(command="sudo cp /vagrant/orchestrator-agent.conf /etc && sudo chown mysql:mysql /etc/orchestrator-agent.conf")
     agent.ssh(command="sudo service orchestrator-agent start")

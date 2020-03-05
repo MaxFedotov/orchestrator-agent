@@ -85,8 +85,13 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 
 func (sm *MysqldumpSeed) Restore() {
 	stage := NewSeedStage(Restore, sm.StatusChan)
-	restoreCmd := fmt.Sprintf("cat %s | mysql -u%s -p%s --port %d", path.Join(sm.BackupDir, sm.BackupFileName), sm.SeedUser, sm.SeedPassword, sm.MySQLPort)
 	sm.Logger.Info("Starting restore")
+	if err := mysql.Exec(sm.MySQLClient.Conn, "RESET MASTER;"); err != nil {
+		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+		sm.Logger.WithField("error", err).Info("Restore failed")
+		return
+	}
+	restoreCmd := fmt.Sprintf("cat %s | mysql -u%s -p%s --port %d", path.Join(sm.BackupDir, sm.BackupFileName), sm.SeedUser, sm.SeedPassword, sm.MySQLPort)
 	err := cmd.CommandRunWithFunc(restoreCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running restore", sm.StatusChan)
 	})

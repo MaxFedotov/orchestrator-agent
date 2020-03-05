@@ -74,3 +74,9 @@ func QueryData(db *sql.DB, query string, argsArray []interface{}, onRow func(sql
 	logger.WithFields(log.Fields{"query": query, "params": argsArray}).Debug("Query executed")
 	return sqlutils.QueryRowsMap(db, query, onRow, argsArray...)
 }
+
+func Exec(db *sql.DB, query string) error {
+	logger.WithFields(log.Fields{"query": query}).Debug("Query executed")
+	_, err := sqlutils.ExecNoPrepare(db, query)
+	return err
+}
