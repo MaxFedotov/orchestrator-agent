@@ -28,7 +28,6 @@ type commonConfig struct {
 	TokenHTTPHeader       string           `toml:"token-http-header"`
 	ExecWithSudo          bool             `toml:"exec-with-sudo"`
 	BackupDir             string           `toml:"backup-dir"`
-	PostSeedCommand       string           `toml:"post-seed-command"`
 	StatusEndpoint        string           `toml:"status-endpoint"`
 	StatusBadSeconds      *config.Duration `toml:"status-bad-seconds"`
 }
@@ -96,7 +95,6 @@ func NewConfig() *Config {
 			TokenHTTPHeader:   "",
 			ExecWithSudo:      false,
 			BackupDir:         "", // directory to put backup or mount snapshot
-			PostSeedCommand:   "",
 			StatusEndpoint:    "/api/status",
 			StatusBadSeconds: &config.Duration{
 				Duration: 300 * time.Second,
@@ -117,8 +115,8 @@ func NewConfig() *Config {
 			SeedPassword: "",
 		},
 		MysqlDump: &seed.MysqldumpConfig{
-			Enabled:  true,
-			Compress: true,
+			Enabled:        true,
+			AdditionalOpts: []string{"--single-transaction", "--quick", "--routines", "--events", "--triggers", "--hex-blob", "--compress"},
 		},
 		Mydumper: &seed.MydumperConfig{
 			Enabled:         false,

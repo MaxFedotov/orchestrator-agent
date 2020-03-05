@@ -31,9 +31,6 @@ func commandSplit(commandText string) (string, []string) {
 		}
 	}
 	return cmd, args
-
-	// re := regexp.MustCompile(`\d?[-.]?\w+|-.*|"(?:\\"|[^"])+"|'(?:\\"|[^"])+'`)
-
 }
 
 func execCmd(commandText string, execWithSudo bool) pipe.Pipe {

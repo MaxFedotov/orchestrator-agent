@@ -566,7 +566,7 @@ func (this *HttpAPI) Cleanup(params martini.Params, r render.Render, req *http.R
 	r.Text(202, "Started")
 }
 
-// postSeedCmd executes PostSeedCommand from config after seed will be completed
+// postSeedCmd executes custom-commands.post-seed-command from config custom-commands config section after seed will be completed
 func (this *HttpAPI) postSeedCmd(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
@@ -582,11 +582,15 @@ func (this *HttpAPI) postSeedCmd(params martini.Params, r render.Render, req *ht
 		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to execute post seed command. SeedID not found"})
 		return
 	}
-	if err = cmd.CommandRun(agent.Config.Common.PostSeedCommand, agent.Config.Common.ExecWithSudo); err != nil {
-		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+	if _, ok := agent.Config.CustomCommands["post-seed-command"]; ok {
+		commandOutput, err := cmd.CommandOutput(agent.Config.CustomCommands["post-seed-command"].Cmd, agent.Config.Common.ExecWithSudo)
+		if err != nil {
+			r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
+			return
+		}
+		r.JSON(200, &APIResponse{Code: OK, Message: string(commandOutput)})
 		return
 	}
-
 	r.JSON(200, err == nil)
 }
 
@@ -683,7 +687,6 @@ func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *htt
 	err := fmt.Errorf("%s : Command not found", params["cmd"])
 	r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 	return
-
 }
 
 // RegisterRequests makes for the de-facto list of known API calls

@@ -14,6 +14,18 @@ import (
 	"gopkg.in/pipe.v2"
 )
 
+var defaultMysqldumpOpts = map[string]bool{
+	"--host":          true,
+	"-h":              true,
+	"--user":          true,
+	"-u":              true,
+	"--password":      true,
+	"-p":              true,
+	"--master-data":   true,
+	"--all-databases": true,
+	"-A":              true,
+}
+
 type MysqldumpSeed struct {
 	*Base
 	*MethodOpts
@@ -23,21 +35,39 @@ type MysqldumpSeed struct {
 }
 
 type MysqldumpConfig struct {
-	Enabled  bool `toml:"enabled"`
-	Compress bool `toml:"compress"`
+	Enabled        bool     `toml:"enabled"`
+	AdditionalOpts []string `toml:"addtional-opts"`
 }
 
 func (sm *MysqldumpSeed) Prepare(side Side) {
 	stage := NewSeedStage(Prepare, sm.StatusChan)
+	sm.Logger.Info("Starting perpare")
+	if side == Target {
+		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFileName))
+		err := cmd.CommandRunWithFunc(cleanupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+			stage.UpdateSeedStatus(Running, cmd, "Running prepare", sm.StatusChan)
+		})
+		if err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+	}
+	sm.Logger.Info("Prepare completed")
 	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 }
 
 func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 	stage := NewSeedStage(Backup, sm.StatusChan)
-	backupCmd := fmt.Sprintf("mysqldump --host=%s --user=%s --password=%s --port=%d --single-transaction --default-character-set=utf8mb4 --master-data=2 --routines --events --triggers --all-databases", seedHost, sm.SeedUser, sm.SeedPassword, mysqlPort)
-	if sm.Config.Compress {
-		backupCmd += fmt.Sprintf(" -C")
+	var addtionalOpts []string
+	for _, opt := range sm.Config.AdditionalOpts {
+		if defaultMysqldumpOpts[strings.Split(opt, "=")[0]] {
+			sm.Logger.WithField("mysqldumpOption", opt).Error("Will skip mysqldump option, as it is already used by default")
+		} else {
+			addtionalOpts = append(addtionalOpts, opt)
+		}
 	}
+	backupCmd := fmt.Sprintf("mysqldump --host=%s --user=%s --password=%s --port=%d --master-data=2 --all-databases %s", seedHost, sm.SeedUser, sm.SeedPassword, mysqlPort, strings.Join(addtionalOpts, " "))
 	backupCmd += fmt.Sprintf(" > %s", path.Join(sm.BackupDir, sm.BackupFileName))
 	sm.Logger.Info("Starting backup")
 	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {

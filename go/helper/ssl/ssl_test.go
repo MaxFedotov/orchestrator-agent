@@ -1,4 +1,4 @@
-package ssl
+package ssl_test
 
 import (
 	"crypto/tls"
