@@ -63,5 +63,5 @@ func (S) TestKill(c *C) {
 	}()
 	time.Sleep(1 * time.Second)
 	activeCommands["cmd1"].Kill()
-	c.Assert(<-ch, ErrorMatches, "explicitly killed")
+	c.Assert(<-ch, ErrorMatches, "error: explicitly killed, stderr: ")
 }

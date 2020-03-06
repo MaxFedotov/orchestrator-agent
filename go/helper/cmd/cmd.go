@@ -53,8 +53,11 @@ func CommandOutput(commandText string, execWithSudo bool) ([]byte, error) {
 		commands = append(commands, pipe.AppendFile(strings.TrimSpace(commandsTextSplitted[1]), 0644))
 	}
 	p := pipe.Line(commands...)
-	outputBytes, err := pipe.Output(p)
-	return outputBytes, err
+	outputBytes, stderr, err := pipe.DividedOutput(p)
+	if err != nil {
+		return nil, fmt.Errorf("error: %+v, stderr: %s", err, string(stderr))
+	}
+	return outputBytes, nil
 }
 
 // CommandOutput executes a command and return output bytes (stderr and stdout)
@@ -85,14 +88,18 @@ func CommandRun(commandText string, execWithSudo bool) error {
 		commands = append(commands, pipe.AppendFile(strings.TrimSpace(commandsTextSplitted[1]), 0644))
 	}
 	p := pipe.Line(commands...)
-	err := pipe.Run(p)
-	return err
+	_, stderr, err := pipe.DividedOutput(p)
+	if err != nil {
+		return fmt.Errorf("error: %+v, stderr: %s", err, string(stderr))
+	}
+	return nil
 }
 
 // CommandRunFunc executes a command and runs specified function
 func CommandRunWithFunc(commandText string, execWithSudo bool, onCommand func(*pipe.State)) error {
 	logger.WithFields(log.Fields{"cmd": commandText}).Debug("Executing command")
-	s := pipe.NewState(nil, nil)
+	outb := &pipe.OutputBuffer{}
+	s := pipe.NewState(nil, outb)
 	commands := []pipe.Pipe{}
 	commandsTextSplitted := strings.Split(commandText, ">")
 	for _, cmd := range strings.Split(commandsTextSplitted[0], "|") {
@@ -107,7 +114,10 @@ func CommandRunWithFunc(commandText string, execWithSudo bool, onCommand func(*p
 		onCommand(s)
 		err = s.RunTasks()
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("error: %+v, stderr: %s", err, string(outb.Bytes()))
+	}
+	return nil
 }
 
 func OutputLines(commandOutput []byte) []string {
