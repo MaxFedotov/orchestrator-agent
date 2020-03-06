@@ -1,9 +1,7 @@
 package seed
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -19,6 +17,8 @@ var defaultMysqldumpOpts = map[string]bool{
 	"-h":              true,
 	"--user":          true,
 	"-u":              true,
+	"--port":          true,
+	"-P":              true,
 	"--password":      true,
 	"-p":              true,
 	"--master-data":   true,
@@ -62,7 +62,7 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 	var addtionalOpts []string
 	for _, opt := range sm.Config.AdditionalOpts {
 		if defaultMysqldumpOpts[strings.Split(opt, "=")[0]] {
-			sm.Logger.WithField("mysqldumpOption", opt).Error("Will skip mysqldump option, as it is already used by default")
+			sm.Logger.WithField("MysqldumpOption", opt).Error("Will skip mysqldump option, as it is already used by default")
 		} else {
 			addtionalOpts = append(addtionalOpts, opt)
 		}
@@ -80,7 +80,6 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 	}
 	sm.Logger.Info("Backup completed")
 	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
-
 }
 
 func (sm *MysqldumpSeed) Restore() {
@@ -106,20 +105,21 @@ func (sm *MysqldumpSeed) Restore() {
 
 func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
 	meta := &SeedMetadata{}
-	file, err := os.Open(path.Join(sm.BackupDir, sm.BackupFileName))
+	output, err := cmd.CommandOutput(fmt.Sprintf("tail -n 100 %s", path.Join(sm.BackupDir, sm.BackupFileName)), sm.ExecWithSudo)
 	if err != nil {
+		sm.Logger.WithField("error", err).Info("Unable to read seed metadata")
 		return meta, err
 	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "GTID_PURGED") {
-			meta.GtidExecuted = strings.Replace(strings.Replace(strings.Split(scanner.Text(), "=")[1], "'", "", -1), ";", "", -1)
+	lines := cmd.OutputLines(output)
+	for _, line := range lines {
+		if strings.Contains(line, "GTID_PURGED") {
+			meta.GtidExecuted = strings.Replace(strings.Replace(strings.Split(line, "=")[1], "'", "", -1), ";", "", -1)
 		}
-		if strings.Contains(scanner.Text(), "CHANGE MASTER") {
-			meta.LogFile = strings.Replace(strings.Split(strings.Split(scanner.Text(), ",")[0], "=")[1], "'", "", -1)
-			meta.LogPos, err = strconv.ParseInt(strings.Replace(strings.Split(strings.Split(scanner.Text(), ",")[1], "=")[1], ";", "", -1), 10, 64)
+		if strings.Contains(line, "CHANGE MASTER") {
+			meta.LogFile = strings.Replace(strings.Split(strings.Split(line, ",")[0], "=")[1], "'", "", -1)
+			meta.LogPos, err = strconv.ParseInt(strings.Replace(strings.Split(strings.Split(line, ",")[1], "=")[1], ";", "", -1), 10, 64)
 			if err != nil {
+				sm.Logger.WithField("error", err).Info("Unable to parse seed metadata")
 				return meta, err
 			}
 			break

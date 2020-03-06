@@ -165,6 +165,8 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 				sm.MethodOpts.BackupSide = Target
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
 				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
+				sm.BackupFolderName = "orchestrator_agent_backup"
+				sm.MetadataFileName = "metadata"
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("Mydumper seed method unavailable")

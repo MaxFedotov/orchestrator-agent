@@ -18,21 +18,21 @@ func init() {
 
 var testname = flag.String("testname", "", "test name to run")
 
-type MysqldumpTestSuite struct{}
+type SeedTestSuite struct{}
 
-var _ = Suite(&MysqldumpTestSuite{})
+var _ = Suite(&SeedTestSuite{})
 
 func Test(t *testing.T) { TestingT(t) }
 
-func (s *MysqldumpTestSuite) SetUpTest(c *C) {
+func (s *SeedTestSuite) SetUpTest(c *C) {
 	if len(*testname) > 0 {
-		if c.TestName() != fmt.Sprintf("MysqldumpTestSuite.%s", *testname) {
+		if c.TestName() != fmt.Sprintf("SeedTestSuite.%s", *testname) {
 			c.Skip("skipping test due to not matched testname")
 		}
 	}
 }
 
-func (s *MysqldumpTestSuite) TestGetMetadataPositional(c *C) {
+func (s *SeedTestSuite) TestMysqldumpGetMetadataPositional(c *C) {
 	workingDir, err := os.Getwd()
 	c.Assert(err, IsNil)
 	backupDir := path.Join(workingDir, "../../tests/functional/mysqldump")
@@ -53,7 +53,7 @@ func (s *MysqldumpTestSuite) TestGetMetadataPositional(c *C) {
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }
 
-func (s *MysqldumpTestSuite) TestGetMetadataGtid(c *C) {
+func (s *SeedTestSuite) TestMysqldumpGetMetadataGtid(c *C) {
 	workingDir, err := os.Getwd()
 	c.Assert(err, IsNil)
 	backupDir := path.Join(workingDir, "../../tests/functional/mysqldump")
@@ -71,6 +71,49 @@ func (s *MysqldumpTestSuite) TestGetMetadataGtid(c *C) {
 		GtidExecuted: "70f9ba7b-5ee3-11ea-96a0-5254008afee6:1",
 	}
 	metadata, err := mysqldump.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
+func (s *SeedTestSuite) TestMydumperGetMetadataPositional(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	backupDir := path.Join(workingDir, "../../tests/functional/mydumper")
+
+	baseConfig := &seed.Base{
+		BackupDir: backupDir,
+	}
+	mydumper := &seed.MydumperSeed{
+		Base:             baseConfig,
+		MetadataFileName: "metadata_positional",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile: "mysql-bin.000022",
+		LogPos:  194,
+	}
+	metadata, err := mydumper.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
+func (s *SeedTestSuite) TestMydumperGetMetadataGtid(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	backupDir := path.Join(workingDir, "../../tests/functional/mydumper")
+
+	baseConfig := &seed.Base{
+		BackupDir: backupDir,
+	}
+	mydumper := &seed.MydumperSeed{
+		Base:             baseConfig,
+		MetadataFileName: "metadata_gtid",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile:      "mysql-bin.000022",
+		LogPos:       194,
+		GtidExecuted: "5c2bd8fc-5ee3-11ea-adf4-5254008afee6:1-741",
+	}
+	metadata, err := mydumper.GetMetadata()
 	c.Assert(err, IsNil)
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }

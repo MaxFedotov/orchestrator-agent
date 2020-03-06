@@ -119,10 +119,9 @@ func NewConfig() *Config {
 			AdditionalOpts: []string{"--single-transaction", "--quick", "--routines", "--events", "--triggers", "--hex-blob", "--compress"},
 		},
 		Mydumper: &seed.MydumperConfig{
-			Enabled:         false,
-			ParallelThreads: 1,
-			RowsChunkSize:   0,
-			Compress:        false,
+			Enabled:                false,
+			MydumperAdditionalOpts: []string{"--routines", "--events", "--triggers", "--compress"},
+			MyloaderAdditionalOpts: []string{},
 		},
 		Xtrabackup: &seed.XtrabackupConfig{
 			Enabled:         false,

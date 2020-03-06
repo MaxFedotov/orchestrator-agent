@@ -88,7 +88,7 @@
   "StatusSimpleHealth": true,
   "StatusOUVerify": false,
   "AgentPollMinutes": 1,
-  "SeedProcessIntervalSeconds": 5,
+  "SeedProcessIntervalSeconds": 8,
   "UnseenAgentForgetHours": 6,
   "StaleSeedFailMinutes": 60,
   "SeedAcceptableBytesDiff": 8192,
