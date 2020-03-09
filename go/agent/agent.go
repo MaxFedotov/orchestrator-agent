@@ -220,18 +220,15 @@ func (agent *Agent) Start() error {
 	}
 	agent.StatusChan = make(chan *seed.SeedStageState)
 	seedBaseConfig := seed.Base{
-		MySQLClient:   agent.MySQLClient,
-		MySQLPort:     agent.Config.Mysql.Port,
-		SeedUser:      agent.Config.Mysql.SeedUser,
-		SeedPassword:  agent.Config.Mysql.SeedPassword,
-		ExecWithSudo:  agent.Config.Common.ExecWithSudo,
-		SeedPort:      agent.Config.Common.SeedPort,
-		UseSSL:        agent.Config.Common.UseSSL,
-		SSLSkipVerify: agent.Config.Common.SSLSkipVerify,
-		SSLCertFile:   agent.Config.Common.SSLCertFile,
-		SSLCAFile:     agent.Config.Common.SSLCAFile,
-		BackupDir:     agent.Config.Common.BackupDir,
-		StatusChan:    agent.StatusChan,
+		MySQLClient:  agent.MySQLClient,
+		MySQLPort:    agent.Config.Mysql.Port,
+		MySQLDatadir: agent.MySQLDatadir,
+		SeedUser:     agent.Config.Mysql.SeedUser,
+		SeedPassword: agent.Config.Mysql.SeedPassword,
+		ExecWithSudo: agent.Config.Common.ExecWithSudo,
+		SeedPort:     agent.Config.Common.SeedPort,
+		BackupDir:    agent.Config.Common.BackupDir,
+		StatusChan:   agent.StatusChan,
 	}
 	seedMethods := make(map[seed.Method]seed.Plugin)
 	availiableSeedMethods := make(map[seed.Method]*seed.MethodOpts)

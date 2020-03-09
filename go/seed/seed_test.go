@@ -117,3 +117,46 @@ func (s *SeedTestSuite) TestMydumperGetMetadataGtid(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }
+
+func (s *SeedTestSuite) TestXtrabackupGetMetadataPositional(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	datadir := path.Join(workingDir, "../../tests/functional/xtrabackup")
+
+	baseConfig := &seed.Base{
+		MySQLDatadir: datadir,
+	}
+	xtrabackup := &seed.XtrabackupSeed{
+		Base:             baseConfig,
+		MetadataFileName: "xtrabackup_binlog_info",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile: "mysql-bin.000007",
+		LogPos:  2030155,
+	}
+	metadata, err := xtrabackup.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
+func (s *SeedTestSuite) TestXtrabackupGetMetadataGtid(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	datadir := path.Join(workingDir, "../../tests/functional/xtrabackup")
+
+	baseConfig := &seed.Base{
+		MySQLDatadir: datadir,
+	}
+	xtrabackup := &seed.XtrabackupSeed{
+		Base:             baseConfig,
+		MetadataFileName: "xtrabackup_binlog_info_gtid",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile:      "mysql-bin.000009",
+		LogPos:       325,
+		GtidExecuted: "956ddec0-33c0-11ea-8a71-3738749ebac9:1",
+	}
+	metadata, err := xtrabackup.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}

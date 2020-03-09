@@ -71,18 +71,15 @@ type Plugin interface {
 }
 
 type Base struct {
-	MySQLClient   *mysql.MySQLClient
-	MySQLPort     int
-	SeedUser      string
-	SeedPassword  string
-	ExecWithSudo  bool
-	SeedPort      int
-	UseSSL        bool
-	SSLSkipVerify bool
-	SSLCertFile   string
-	SSLCAFile     string
-	BackupDir     string
-	StatusChan    chan *SeedStageState
+	MySQLClient  *mysql.MySQLClient
+	MySQLPort    int
+	MySQLDatadir string
+	SeedUser     string
+	SeedPassword string
+	ExecWithSudo bool
+	SeedPort     int
+	BackupDir    string
+	StatusChan   chan *SeedStageState
 }
 
 type MethodOpts struct {
@@ -129,6 +126,7 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 				sm.MethodOpts.BackupSide = Source
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
 				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
+				sm.MetadataFileName = "xtrabackup_binlog_info"
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("Xtrabackup seed method unavailable")

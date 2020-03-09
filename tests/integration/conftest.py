@@ -33,7 +33,7 @@ def enable_gtid():
 def disable_gtid():
     for host, box in pytest.vagrant_hosts.items():
         if 'source' in host.lower():
-            print("Enabling gtid {}".format(host))
+            print("Disabling gtid {}".format(host))
             box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency && sudo service mysql restart")
             box.ssh(command="mysql sakila -BNe \"RESET MASTER;\"")
             box.ssh(command="mysql sakila -BNe \"UPDATE actor set first_name='test' WHERE actor_id = 1\"")
@@ -140,7 +140,7 @@ def prepare_agent(agent, update_agent,server_id):
         agent.ssh(command="sudo rm -rf /var/lib/mysql/auto.cnf")
         agent.ssh(command="sudo service mysql restart")
         agent.ssh(command="sudo yum install -y epel-release")
-        agent.ssh(command="sudo yum install -y crudini")
+        agent.ssh(command="sudo yum install -y crudini qpress")
     agent.ssh(command="sudo bash -c \"rm -rf /tmp/bkp && mkdir /tmp/bkp && chown -R mysql:mysql /tmp/bkp\"")
     print(agent.ssh(command="sudo yum install -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
     agent.ssh(command="sudo cp /vagrant/orchestrator-agent.conf /etc && sudo chown mysql:mysql /etc/orchestrator-agent.conf")

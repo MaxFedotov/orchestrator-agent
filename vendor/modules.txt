@@ -31,8 +31,6 @@ github.com/mgutz/ansi
 # github.com/openark/golib v0.0.0-20191111114742-8fd0aff957ba
 github.com/openark/golib/log
 github.com/openark/golib/sqlutils
-# github.com/outbrain/golib v0.0.0-20180830062331-ab954725f502
-github.com/outbrain/golib/log
 # github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c
 github.com/oxtoacart/bpool
 # github.com/sirupsen/logrus v1.4.2

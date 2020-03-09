@@ -14,7 +14,8 @@ var logger = log.WithFields(log.Fields{"prefix": "CMD"})
 func commandSplit(commandText string) (string, []string) {
 	var args []string
 	cmd := ""
-	re := regexp.MustCompile(`[-./.\d\w]\S*\d?|"(?:\\"|[^"])+"|'(?:\\"|[^"])+'`)
+	//re := regexp.MustCompile(`[-./.\d\w]\S*\d?|"(?:\\"|[^"])+"|'(?:\\"|[^"])+'`)
+	re := regexp.MustCompile(`(?:\S*".*?")|[-./.\d\w]\S*\d?|"(?:\\"|[^"])+"|'(?:\\"|[^"])+'`)
 	res := re.FindAllStringSubmatch(commandText, -1)
 
 	for idx, match := range res {

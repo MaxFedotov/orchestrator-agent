@@ -35,8 +35,8 @@ type MysqldumpSeed struct {
 }
 
 type MysqldumpConfig struct {
-	Enabled        bool     `toml:"enabled"`
-	AdditionalOpts []string `toml:"addtional-opts"`
+	Enabled                 bool     `toml:"enabled"`
+	MysqldumpAdditionalOpts []string `toml:"addtional-opts"`
 }
 
 func (sm *MysqldumpSeed) Prepare(side Side) {
@@ -60,7 +60,7 @@ func (sm *MysqldumpSeed) Prepare(side Side) {
 func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 	stage := NewSeedStage(Backup, sm.StatusChan)
 	var addtionalOpts []string
-	for _, opt := range sm.Config.AdditionalOpts {
+	for _, opt := range sm.Config.MysqldumpAdditionalOpts {
 		if defaultMysqldumpOpts[strings.Split(opt, "=")[0]] {
 			sm.Logger.WithField("MysqldumpOption", opt).Error("Will skip mysqldump option, as it is already used by default")
 		} else {

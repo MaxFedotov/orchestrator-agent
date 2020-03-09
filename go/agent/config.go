@@ -115,18 +115,21 @@ func NewConfig() *Config {
 			SeedPassword: "",
 		},
 		MysqlDump: &seed.MysqldumpConfig{
-			Enabled:        true,
-			AdditionalOpts: []string{"--single-transaction", "--quick", "--routines", "--events", "--triggers", "--hex-blob", "--compress"},
+			Enabled:                 true,
+			MysqldumpAdditionalOpts: []string{"--single-transaction", "--quick", "--routines", "--events", "--triggers", "--hex-blob"},
 		},
 		Mydumper: &seed.MydumperConfig{
 			Enabled:                false,
-			MydumperAdditionalOpts: []string{"--routines", "--events", "--triggers", "--compress"},
+			MydumperAdditionalOpts: []string{"--routines", "--events", "--triggers"},
 			MyloaderAdditionalOpts: []string{},
 		},
 		Xtrabackup: &seed.XtrabackupConfig{
-			Enabled:         false,
-			ParallelThreads: 1,
-			Compress:        false,
+			Enabled:                  false,
+			XtrabackupAdditionalOpts: []string{},
+			SocatUseSSL:              false,
+			SocatSSLCertFile:         "",
+			SocatSSLCAFile:           "",
+			SocatSSLSkipVerify:       false,
 		},
 		LVM: &seed.LVMConfig{
 			Enabled:                            false,
