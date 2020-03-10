@@ -22,8 +22,8 @@ def enable_gtid():
         if 'source' in host.lower():
             print("Enabling gtid {}".format(host))
             box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON && sudo service mysql restart")
-            box.ssh(command="mysql sakila -BNe \"RESET MASTER\"")
-            box.ssh(command="mysql sakila -BNe \"UPDATE actor set first_name='test' WHERE actor_id = 1\"")
+            box.ssh(command="mysql -BNe \"RESET MASTER\"")
+            box.ssh(command="mysql employees -BNe \"UPDATE employees set first_name='test' WHERE emp_no = 10001\"")
         if 'target' in host.lower():
             print("Enabling gtid {}".format(host))
             box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON && sudo service mysql restart")
@@ -35,8 +35,8 @@ def disable_gtid():
         if 'source' in host.lower():
             print("Disabling gtid {}".format(host))
             box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency && sudo service mysql restart")
-            box.ssh(command="mysql sakila -BNe \"RESET MASTER;\"")
-            box.ssh(command="mysql sakila -BNe \"UPDATE actor set first_name='test' WHERE actor_id = 1\"")
+            box.ssh(command="mysql -BNe \"RESET MASTER;\"")
+            box.ssh(command="mysql employees -BNe \"UPDATE employees set first_name='test' WHERE emp_no = 10001\"")
         if 'target' in host.lower():
             print("Disabling gtid {}".format(host))
             box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency && sudo service mysql restart")
@@ -53,7 +53,7 @@ def reset_target_agent():
             box.ssh(command="mysql -e 'DROP DATABASE IF EXISTS sakila;'")
             box.ssh(command="mysql -e 'DROP DATABASE IF EXISTS world;'")
             box.ssh(command="mysql -e 'RESET MASTER;'")
-            box.ssh(command="sudo service orchestrator-agent restart")
+            box.ssh(command="sudo service orchestrator-agent restart && sleep 10s")
 
 
 @pytest.fixture(scope="module")
@@ -91,7 +91,7 @@ def prepare_env(pytestconfig):
     for host, box in vagrant_hosts.items():
         if 'agent' in host.lower():
             print("Preparing {}".format(host))
-            prepare_agent(box, pytestconfig.getoption("only_update_agents"), server_id)
+            prepare_agent(box, pytestconfig.getoption("only_update_agents"), server_id, pytestconfig.getoption("mysql_version"))
             server_id += 1
     
     for host, box in vagrant_hosts.items():
@@ -100,7 +100,6 @@ def prepare_env(pytestconfig):
             print(box.ssh(command="cd /home/vagrant/databases/employees && mysql < employees.sql"))
             print(box.ssh(command="mysql < /home/vagrant/databases/sakila/sakila.sql"))
             print(box.ssh(command="mysql < /home/vagrant/databases/world/world.sql"))
-
 
     pytest.vagrant_hosts = vagrant_hosts
     yield vagrant_hosts
@@ -123,25 +122,23 @@ def create_vagrant_box(vagrantPath, hostname, ip):
 def prepare_orchestrator(orchestrator, repo, branch):
     print("Preparing orchestrator")
     print(orchestrator.ssh(command="mkdir -p $GOPATH/src/github.com/github/orchestrator && git clone --single-branch --branch {} {} $GOPATH/src/github.com/github/orchestrator".format(branch, repo)))
-    print(orchestrator.ssh(command="sudo yum install -y ruby ruby-devel rubygems gcc gcc-c++ make rpm-build epel-release jq"))
-    print(orchestrator.ssh(command="gem install --no-ri --no-rdoc fpm"))
     print(orchestrator.ssh(command="cd $GOPATH/src/github.com/github/orchestrator/ && ./build.sh -t linux -i systemd -P"))
     print(orchestrator.ssh(command="sudo yum install -y $(find /tmp/orchestrator-release/ -name 'orchestrator-*.rpm' | grep -v cli)"))
     orchestrator.ssh(command="sudo cp /vagrant/orchestrator.conf.json /etc/orchestrator.conf.json")
     orchestrator.ssh(command="sudo service orchestrator start")
 
 
-def prepare_agent(agent, update_agent,server_id):
+def prepare_agent(agent, update_agent,server_id, mysql_version):
     if update_agent:
         print(agent.ssh(command="sudo yum -y erase orchestrator-agent.x86_64"))
+        agent.ssh(command="sudo service orchestrator-agent stop")
     else:
-        agent.ssh(command="sudo bash -c \"echo 'mysql ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers\"")
         agent.ssh(command="sudo bash -c \"grep -rli /etc/my.cnf -e 'server_id = 1' |  xargs -i@ sed -i 's/server_id = 1/server_id = {}/g' @\"".format(server_id))
         agent.ssh(command="sudo rm -rf /var/lib/mysql/auto.cnf")
         agent.ssh(command="sudo service mysql restart")
-        agent.ssh(command="sudo yum install -y epel-release")
-        agent.ssh(command="sudo yum install -y crudini qpress")
     agent.ssh(command="sudo bash -c \"rm -rf /tmp/bkp && mkdir /tmp/bkp && chown -R mysql:mysql /tmp/bkp\"")
     print(agent.ssh(command="sudo yum install -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
-    agent.ssh(command="sudo cp /vagrant/orchestrator-agent.conf /etc && sudo chown mysql:mysql /etc/orchestrator-agent.conf")
-    agent.ssh(command="sudo service orchestrator-agent start")
+    agent.ssh(command="sudo cp /vagrant/orchestrator-agent_{}.conf /etc/orchestrator-agent.conf && sudo chown mysql:mysql /etc/orchestrator-agent.conf".format(mysql_version))
+    agent.ssh(command="sudo systemctl daemon-reload")
+    agent.ssh(command="sudo service orchestrator-agent start && sleep 10s")
+

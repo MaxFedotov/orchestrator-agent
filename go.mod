@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/MaxFedotov/logrus-prefixed-formatter v0.5.2
+	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
 	github.com/github/orchestrator v3.1.4+incompatible
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab

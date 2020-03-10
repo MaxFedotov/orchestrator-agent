@@ -26,6 +26,12 @@ func commandSplit(commandText string) (string, []string) {
 				if arg == "' '" || arg == "\" \"" {
 					args = append(args, " ")
 				} else {
+					if strings.HasPrefix(arg, "\"") && strings.HasSuffix(arg, "\"") {
+						arg = strings.Trim(arg, "\"")
+					}
+					if strings.HasPrefix(arg, "'") && strings.HasSuffix(arg, "'") {
+						arg = strings.Trim(arg, "'")
+					}
 					args = append(args, arg)
 				}
 			}
