@@ -160,3 +160,46 @@ func (s *SeedTestSuite) TestXtrabackupGetMetadataGtid(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }
+
+func (s *SeedTestSuite) TestLVMGetMetadataPositional(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	datadir := path.Join(workingDir, "../../tests/functional/lvm")
+
+	baseConfig := &seed.Base{
+		MySQLDatadir: datadir,
+	}
+	lvm := &seed.LVMSeed{
+		Base:             baseConfig,
+		MetadataFileName: "metadata_positional",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile: "mysql-bin.000009",
+		LogPos:  701,
+	}
+	metadata, err := lvm.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
+func (s *SeedTestSuite) TestLVMGetMetadataGtidl(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	datadir := path.Join(workingDir, "../../tests/functional/lvm")
+
+	baseConfig := &seed.Base{
+		MySQLDatadir: datadir,
+	}
+	lvm := &seed.LVMSeed{
+		Base:             baseConfig,
+		MetadataFileName: "metadata_gtid",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile:      "mysql-bin.000009",
+		LogPos:       701,
+		GtidExecuted: "5c2bd8fc-5ee3-11ea-adf4-5254008afee6:1-741",
+	}
+	metadata, err := lvm.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}

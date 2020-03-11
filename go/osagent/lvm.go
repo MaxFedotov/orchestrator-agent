@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/github/orchestrator-agent/go/helper/cmd"
 )
@@ -16,6 +17,7 @@ type LogicalVolume struct {
 	Path            string
 	IsSnapshot      bool
 	SnapshotPercent float64
+	CreatedAt       time.Time
 }
 
 // Mount describes a file system mount point
@@ -59,13 +61,14 @@ func GetSnapshotHosts(snapshotHostsCmd string, execWithSudo bool) ([]string, err
 }
 
 func GetLogicalVolumes(volumeName string, filterPattern string, execWithSudo bool) ([]*LogicalVolume, error) {
+	var createdAt time.Time
 	logicalVolumes := []*LogicalVolume{}
 	output, err := cmd.CommandOutput(fmt.Sprintf("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent %s", volumeName), execWithSudo)
 	if err != nil {
 		return logicalVolumes, err
 	}
 	tokens := cmd.OutputTokens(`[ \t]+`, output)
-	if len(tokens[0][0]) > 0 {
+	if len(tokens) > 0 {
 		for _, lineTokens := range tokens {
 			logicalVolume := &LogicalVolume{
 				Name:      lineTokens[1],
@@ -75,6 +78,13 @@ func GetLogicalVolumes(volumeName string, filterPattern string, execWithSudo boo
 			logicalVolume.SnapshotPercent, err = strconv.ParseFloat(lineTokens[4], 32)
 			logicalVolume.IsSnapshot = (err == nil)
 			if strings.Contains(logicalVolume.Name, filterPattern) {
+				output, err := cmd.CommandOutput(fmt.Sprintf("lvdisplay %s | grep -e 'LV Creation host, time' | awk '{print $6\" \"$7}'", logicalVolume.Path), execWithSudo)
+				if err == nil {
+					createdAt, err = time.Parse("2006-01-02 15:04:05", cmd.OutputLines(output)[0])
+					if err == nil {
+						logicalVolume.CreatedAt = createdAt
+					}
+				}
 				logicalVolumes = append(logicalVolumes, logicalVolume)
 			}
 		}
@@ -130,22 +140,14 @@ func MountLV(mountPoint string, volumeName string, execWithSudo bool) (*Mount, e
 	return GetMount(mountPoint, execWithSudo)
 }
 
-func Unmount(mountPoint string, execWithSudo bool) (*Mount, error) {
-	mount := &Mount{
-		Path:      mountPoint,
-		IsMounted: false,
-	}
-	err := cmd.CommandRun(fmt.Sprintf("umount %s", mountPoint), execWithSudo)
-	if err != nil {
-		return mount, err
-	}
-	return GetMount(mountPoint, execWithSudo)
+func Unmount(mountPoint string, execWithSudo bool) error {
+	return cmd.CommandRun(fmt.Sprintf("umount %s", mountPoint), execWithSudo)
 }
 
 func RemoveLV(volumeName string, execWithSudo bool) error {
 	return cmd.CommandRun(fmt.Sprintf("lvremove --force %s", volumeName), execWithSudo)
 }
 
-func CreateSnapshot(createSnapshostCommand string) error {
-	return cmd.CommandRun(createSnapshostCommand, false)
+func CreateSnapshot(createSnapshostCommand string, execWithSudo bool) error {
+	return cmd.CommandRun(createSnapshostCommand, execWithSudo)
 }

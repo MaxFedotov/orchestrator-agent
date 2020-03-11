@@ -28,9 +28,9 @@ def enable_gtid():
             print("Enabling gtid {}".format(host))
             box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON && sudo service mysql restart")
 
-
 @pytest.fixture(scope="module")
 def disable_gtid():
+    pass
     for host, box in pytest.vagrant_hosts.items():
         if 'source' in host.lower():
             print("Disabling gtid {}".format(host))
@@ -40,7 +40,26 @@ def disable_gtid():
         if 'target' in host.lower():
             print("Disabling gtid {}".format(host))
             box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency && sudo service mysql restart")
- 
+
+@pytest.fixture(scope="module")
+def reset_lvm():
+    for host, box in pytest.vagrant_hosts.items():
+        if 'source' in host.lower():
+            print("Reseting LVM {}".format(host))
+            box.ssh(command="sudo service mysql stop")
+            box.ssh(command="sudo mkdir /var/lib/mysql2")
+            box.ssh(command="sudo bash -c \"cp -R /var/lib/mysql/* /var/lib/mysql2\"")
+            box.ssh(command="sudo umount /var/lib/mysql || true")
+            box.ssh(command="sudo rm -rf /var/lib/mysql || true")
+            box.ssh(command="sudo lvremove -f mysql_vg")
+            box.ssh(command="sudo lvcreate -L 900M -n mysql_lv mysql_vg -y")
+            box.ssh(command="sudo mkfs.ext4 /dev/mysql_vg/mysql_lv")
+            box.ssh(command="sudo mkdir /var/lib/mysql || true")
+            box.ssh(command="sudo mount /dev/mysql_vg/mysql_lv /var/lib/mysql")
+            box.ssh(command="sudo bash -c \"cp -R /var/lib/mysql2/* /var/lib/mysql\"")
+            box.ssh(command="sudo rm -rf /var/lib/mysql2")
+            box.ssh(command="sudo chown -R mysql:mysql /var/lib/mysql")
+            box.ssh(command="sudo service mysql start && sleep 10s")
 
 @pytest.fixture(autouse=True)
 def reset_target_agent():
@@ -53,7 +72,6 @@ def reset_target_agent():
             box.ssh(command="mysql -e 'DROP DATABASE IF EXISTS sakila;'")
             box.ssh(command="mysql -e 'DROP DATABASE IF EXISTS world;'")
             box.ssh(command="mysql -e 'RESET MASTER;'")
-            box.ssh(command="sudo service orchestrator-agent restart && sleep 10s")
 
 
 @pytest.fixture(scope="module")
@@ -95,6 +113,7 @@ def prepare_env(pytestconfig):
             server_id += 1
     
     for host, box in vagrant_hosts.items():
+        pass
         if 'source' in host.lower():
             print("Creating databases on {}".format(host))
             print(box.ssh(command="cd /home/vagrant/databases/employees && mysql < employees.sql"))

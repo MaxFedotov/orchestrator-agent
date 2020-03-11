@@ -51,8 +51,6 @@ func init() {
 	os.Setenv("PATH", fmt.Sprintf("%s:/usr/sbin:/usr/bin:/sbin:/bin", osPath))
 }
 
-/* NEW FUNCTIONS */
-
 // GetFSStatistics returns different filesystem stats for path according to stat parameter - total\free\used size
 func GetFSStatistics(path string, stat FSStat) (int64, error) {
 	var size int64

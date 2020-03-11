@@ -126,12 +126,12 @@ func (this *HttpAPI) Unmount(params martini.Params, r render.Render, req *http.R
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	output, err := osagent.Unmount(agent.Config.Common.BackupDir, agent.Config.Common.ExecWithSudo)
+	err := osagent.Unmount(agent.Config.Common.BackupDir, agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	r.JSON(200, output)
+	r.JSON(200, err == nil)
 }
 
 // CreateSnapshot lists dc-local available snapshots for this host
@@ -139,7 +139,7 @@ func (this *HttpAPI) CreateSnapshot(params martini.Params, r render.Render, req 
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	err := osagent.CreateSnapshot(agent.Config.LVM.CreateSnapshotCommand)
+	err := osagent.CreateSnapshot(agent.Config.LVM.CreateSnapshotCommand, agent.Config.Common.ExecWithSudo)
 	if err != nil {
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return

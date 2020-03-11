@@ -53,17 +53,17 @@ func (sm *XtrabackupSeed) Prepare(side Side) {
 	sm.Logger.Info("Starting prepare")
 	if side == Target {
 		var wg sync.WaitGroup
+		stage.UpdateSeedStatus(Running, nil, "Stopping MySQL", sm.StatusChan)
+		if err := osagent.MySQLStop(sm.ExecWithSudo); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
 		cleanupDatadirCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.MySQLDatadir, "*"))
 		err := cmd.CommandRunWithFunc(cleanupDatadirCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Cleaning MySQL datadir", sm.StatusChan)
 		})
 		if err != nil {
-			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
-			sm.Logger.WithField("error", err).Info("Prepare failed")
-			return
-		}
-		stage.UpdateSeedStatus(Running, nil, "Stopping MySQL", sm.StatusChan)
-		if err := osagent.MySQLStop(sm.ExecWithSudo); err != nil {
 			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 			sm.Logger.WithField("error", err).Info("Prepare failed")
 			return

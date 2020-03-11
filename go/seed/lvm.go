@@ -2,17 +2,25 @@ package seed
 
 import (
 	"fmt"
+	"path"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/helper/mysql"
+	"github.com/github/orchestrator-agent/go/osagent"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/pipe.v2"
 )
 
 type LVMSeed struct {
 	*Base
 	*MethodOpts
-	Config *LVMConfig
-	Logger *log.Entry
+	Config           *LVMConfig
+	Logger           *log.Entry
+	MetadataFileName string
 }
 
 type LVMConfig struct {
@@ -22,31 +30,175 @@ type LVMConfig struct {
 	AvailableSnapshotHostsCommand      string `toml:"available-snapshot-hosts-command"`
 	SnapshotVolumesFilter              string `toml:"snapshot-volumes-filter"`
 	SnapshotMountPoint                 string `toml:"snapshot-mount-point"`
+	CreateNewSnapshotForSeed           bool   `toml:"create-new-snapshot-for-seed"`
+	SocatUseSSL                        bool   `toml:"socat-use-ssl"`
+	SocatSSLCertFile                   string `toml:"socat-ssl-cert-file"`
+	SocatSSLCAFile                     string `toml:"socat-ssl-cat-file"`
+	SocatSSLSkipVerify                 bool   `toml:"socat-ssl-skip-verify"`
 }
 
 func (sm *LVMSeed) Prepare(side Side) {
-	sm.Logger.Info("This is LVM prepare")
+	stage := NewSeedStage(Prepare, sm.StatusChan)
+	sm.Logger.Info("Starting prepare")
+	if side == Source {
+		var latestSnapshotTime time.Time
+		var latestLV *osagent.LogicalVolume
+		if sm.Config.CreateNewSnapshotForSeed {
+			if err := osagent.CreateSnapshot(sm.Config.CreateSnapshotCommand, sm.ExecWithSudo); err != nil {
+				stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+				sm.Logger.WithField("error", err).Info("Failed to create snapshot")
+				return
+			}
+		}
+		logicalVolumes, err := osagent.GetLogicalVolumes("", sm.Config.SnapshotVolumesFilter, sm.ExecWithSudo)
+		if err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Failed to get logical volumes info")
+			return
+		}
+		for _, lv := range logicalVolumes {
+			if lv.IsSnapshot == true {
+				if lv.CreatedAt.After(latestSnapshotTime) {
+					latestSnapshotTime = lv.CreatedAt
+					latestLV = lv
+				}
+			}
+		}
+		if _, err := osagent.MountLV(sm.BackupDir, latestLV.Path, sm.ExecWithSudo); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Failed to mount snapshot")
+			return
+		}
+	}
+	if side == Target {
+		var wg sync.WaitGroup
+		stage.UpdateSeedStatus(Running, nil, "Stopping MySQL", sm.StatusChan)
+		if err := osagent.MySQLStop(sm.ExecWithSudo); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		cleanupDatadirCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.MySQLDatadir, "*"))
+		err := cmd.CommandRunWithFunc(cleanupDatadirCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+			stage.UpdateSeedStatus(Running, cmd, "Cleaning MySQL datadir", sm.StatusChan)
+		})
+		if err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		wg.Add(1)
+		go func(wg *sync.WaitGroup) {
+			socatConOpts := fmt.Sprintf("TCP-LISTEN:%d,reuseaddr", sm.SeedPort)
+			if sm.Config.SocatUseSSL {
+				socatConOpts = fmt.Sprintf("openssl-listen:%d,reuseaddr,cert=%s", sm.SeedPort, sm.Config.SocatSSLCertFile)
+				if len(sm.Config.SocatSSLCAFile) > 0 {
+					socatConOpts += fmt.Sprintf(",cafile=%s", sm.Config.SocatSSLCAFile)
+				}
+				if sm.Config.SocatSSLSkipVerify {
+					socatConOpts += ",verify=0"
+				}
+			}
+			recieveCmd := fmt.Sprintf("socat -u %s EXEC:\"tar xzf - -C %s\"", socatConOpts, sm.MySQLDatadir)
+			err := cmd.CommandRunWithFunc(recieveCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+				stage.UpdateSeedStatus(Running, cmd, fmt.Sprintf("Started socat on port %d. Waiting for backup data", sm.SeedPort), sm.StatusChan)
+				wg.Done()
+			})
+			if err != nil {
+				stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+				sm.Logger.WithField("error", err).Info("Socat failed")
+				return
+			}
+		}(&wg)
+		wg.Wait()
+		sm.Logger.Info("Prepare completed")
+		stage.UpdateSeedStatus(Completed, nil, fmt.Sprintf("Prepare completed. Started socat on port %d. Waiting for backup data", sm.SeedPort), sm.StatusChan)
+		return
+	}
+	sm.Logger.Info("Prepare completed")
+	stage.UpdateSeedStatus(Completed, nil, "Prepare completed", sm.StatusChan)
 }
 
 func (sm *LVMSeed) Backup(seedHost string, mysqlPort int) {
-	sm.Logger.Info("This is LVM backup")
+	stage := NewSeedStage(Backup, sm.StatusChan)
+	socatConOpts := fmt.Sprintf("TCP:%s:%d", seedHost, sm.SeedPort)
+	if sm.Config.SocatUseSSL {
+		socatConOpts = fmt.Sprintf("openssl-connect:%s:%d,cert=%s", seedHost, sm.SeedPort, sm.Config.SocatSSLCertFile)
+		if len(sm.Config.SocatSSLCAFile) > 0 {
+			socatConOpts += fmt.Sprintf(",cafile=%s", sm.Config.SocatSSLCAFile)
+		}
+		if sm.Config.SocatSSLSkipVerify {
+			socatConOpts += ",verify=0"
+		}
+	}
+	backupCmd := fmt.Sprintf("socat EXEC:\"tar czf - -C %s .\" %s", sm.BackupDir, socatConOpts)
+	sm.Logger.Info("Starting backup")
+	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
+	})
+	if err != nil {
+		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+		sm.Logger.WithField("error", err).Info("Backup failed")
+		return
+	}
+	sm.Logger.Info("Backup completed")
+	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 }
 
 func (sm *LVMSeed) Restore() {
-	sm.Logger.Info("This is LVM restore")
+	stage := NewSeedStage(Restore, sm.StatusChan)
+	if err := osagent.MySQLStart(sm.ExecWithSudo); err != nil {
+		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+		sm.Logger.WithField("error", err).Info("Restore failed")
+	}
+	sm.Logger.Info("Restore completed")
+	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 }
 
 func (sm *LVMSeed) GetMetadata() (*SeedMetadata, error) {
-	sm.Logger.Info("This is LVM metadata")
-	return &SeedMetadata{}, nil
+	meta := &SeedMetadata{}
+	output, err := cmd.CommandOutput(fmt.Sprintf("cat %s", path.Join(sm.MySQLDatadir, sm.MetadataFileName)), sm.ExecWithSudo)
+	if err != nil {
+		sm.Logger.WithField("error", err).Info("Unable to read seed metadata")
+		return meta, err
+	}
+	lines := cmd.OutputLines(output)
+	for _, line := range lines {
+		if strings.Contains(line, "File:") {
+			meta.LogFile = strings.Trim(strings.Split(line, ":")[1], " ")
+		}
+		if strings.Contains(line, "Position:") {
+			meta.LogPos, err = strconv.ParseInt(strings.Trim(strings.Split(line, ":")[1], " "), 10, 64)
+			if err != nil {
+				sm.Logger.WithField("error", err).Info("Unable to parse seed metadata")
+				return meta, err
+			}
+		}
+		if strings.Contains(line, "Executed_Gtid_Set:") {
+			meta.GtidExecuted = strings.Trim(strings.SplitAfterN(line, ":", 2)[1], " ")
+			break
+		}
+	}
+	return meta, err
 }
 
 func (sm *LVMSeed) Cleanup(side Side) {
-	sm.Logger.Info("This is LVM cleanup")
+	stage := NewSeedStage(Cleanup, sm.StatusChan)
+	sm.Logger.Info("Starting cleanup")
+	if side == Source {
+		if err := osagent.Unmount(sm.BackupDir, sm.ExecWithSudo); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Cleanup failed")
+			return
+		}
+	}
+	sm.Logger.Info("Cleanup completed")
+	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
+
 }
 
 func (sm *LVMSeed) isAvailable() bool {
-	err := cmd.CommandRun(fmt.Sprintf("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent,time --sort -time %s", sm.Config.SnapshotVolumesFilter), sm.ExecWithSudo)
+	err := cmd.CommandRun("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent,time --sort -time", sm.ExecWithSudo)
 	if err != nil {
 		return false
 	}

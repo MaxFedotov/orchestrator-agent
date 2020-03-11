@@ -108,6 +108,7 @@ func New(seedMethod Method, baseConfig *Base, logger *log.Entry, seedMethodConfi
 				sm.MethodOpts.BackupSide = Source
 				sm.MethodOpts.SupportedEngines = sm.getSupportedEngines()
 				sm.MethodOpts.BackupToDatadir = sm.backupToDatadir()
+				sm.MetadataFileName = "metadata"
 				return sm, sm.MethodOpts, nil
 			}
 			return nil, nil, fmt.Errorf("LVM seed method unavailable")

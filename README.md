@@ -1,5 +1,25 @@
 ++ NOTES ABOUT RUNNING AGENT UNDER MYSQL ACCOUNT
 ++ BACKUP_DIR = SNAPSHOT_MOUNT_POINT
+++ If using LVM seed method and your source server is mysql slave - you should use skip-slave-start option on your target server
+++ create-snapshot-command should create a file in mysql datadir called metadata with following content
+`
+File:mysql-bin.000009
+Position:701
+Executed_Gtid_Set:5c2bd8fc-5ee3-11ea-adf4-5254008afee6:1-741
+`
+as a basic example you can use following mysql script
+`
+cat /tmp/create_snapshot.sql
+flush tables with read lock;
+SYSTEM mysql -ANe "SHOW MASTER STATUS"| awk '{print "File:"$1"\n""Position:"$2"\n""Executed_Gtid_Set:"$3}' > /var/lib/mysql/metadata && chown mysql:mysql /var/lib/mysql/metadata
+SYSTEM sudo bash -c 'lvcreate -l20%FREE -s -n mysql-backup_$(date +%s) /dev/mysql_vg/mysql_lv'
+unlock tables;
+`
+
+and use following create-snapshot-command
+`
+cat /tmp/create_snapshot.sql | mysql
+`
 
 orchestrator-agent
 ==================

@@ -133,10 +133,15 @@ func NewConfig() *Config {
 		},
 		LVM: &seed.LVMConfig{
 			Enabled:                            false,
+			CreateNewSnapshotForSeed:           false,
 			CreateSnapshotCommand:              "",
 			AvailableLocalSnapshotHostsCommand: "",
 			AvailableSnapshotHostsCommand:      "",
 			SnapshotVolumesFilter:              "",
+			SocatUseSSL:                        false,
+			SocatSSLCertFile:                   "",
+			SocatSSLCAFile:                     "",
+			SocatSSLSkipVerify:                 false,
 		},
 		ClonePlugin: &seed.ClonePluginConfig{
 			Enabled: false,
