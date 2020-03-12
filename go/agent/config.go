@@ -144,7 +144,17 @@ func NewConfig() *Config {
 			SocatSSLSkipVerify:                 false,
 		},
 		ClonePlugin: &seed.ClonePluginConfig{
-			Enabled: false,
+			Enabled:                  false,
+			CloneAutotuneConcurrency: true,
+			CloneBufferSize:          4194304,
+			CloneDDLTimeout:          300,
+			CloneEnableCompression:   false,
+			CloneMaxConcurrency:      16,
+			CloneMaxDataBandwidth:    0,
+			CloneMaxNetworkBandwidth: 0,
+			CloneSSLCa:               "",
+			CloneSSLCert:             "",
+			CloneSSLKey:              "",
 		},
 	}
 	return config

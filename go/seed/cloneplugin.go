@@ -21,12 +21,69 @@ type ClonePluginSeed struct {
 }
 
 type ClonePluginConfig struct {
-	Enabled bool `toml:"enabled"`
+	Enabled                  bool   `toml:"enabled"`
+	CloneAutotuneConcurrency bool   `toml:"clone-autotune-concurrency"`
+	CloneBufferSize          int64  `toml:"clone-buffer-size"`
+	CloneDDLTimeout          int64  `toml:"clone-ddl-timeout"`
+	CloneEnableCompression   bool   `toml:"clone-enable-compression"`
+	CloneMaxConcurrency      int    `toml:"clone-max-concurrency"`
+	CloneMaxDataBandwidth    int    `toml:"clone-max-data-bandwidth"`
+	CloneMaxNetworkBandwidth int    `toml:"clone-max-network-bandwidth"`
+	CloneSSLCa               string `toml:"clone-ssl-ca"`
+	CloneSSLCert             string `toml:"clone-ssl-cert"`
+	CloneSSLKey              string `toml:"clone-ssl-key"`
 }
 
 func (sm *ClonePluginSeed) Prepare(side Side) {
 	stage := NewSeedStage(Prepare, sm.StatusChan)
-	sm.Logger.Info("Starting perpare")
+	sm.Logger.Info("Starting prepare")
+	if side == Target {
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_autotune_concurrency=%t", sm.Config.CloneAutotuneConcurrency)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_buffer_size=%d", sm.Config.CloneBufferSize)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_ddl_timeout=%d", sm.Config.CloneDDLTimeout)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_enable_compression=%t", sm.Config.CloneEnableCompression)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_max_concurrency=%d", sm.Config.CloneMaxConcurrency)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_max_data_bandwidth=%d", sm.Config.CloneMaxNetworkBandwidth)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_ssl_ca='%s'", sm.Config.CloneSSLCa)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_ssl_cert='%s'", sm.Config.CloneSSLCert)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_ssl_key='%s'", sm.Config.CloneSSLKey)); err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+	}
 	sm.Logger.Info("Prepare completed")
 	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 }

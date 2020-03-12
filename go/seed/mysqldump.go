@@ -41,7 +41,7 @@ type MysqldumpConfig struct {
 
 func (sm *MysqldumpSeed) Prepare(side Side) {
 	stage := NewSeedStage(Prepare, sm.StatusChan)
-	sm.Logger.Info("Starting perpare")
+	sm.Logger.Info("Starting prepare")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFileName))
 		err := cmd.CommandRunWithFunc(cleanupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {

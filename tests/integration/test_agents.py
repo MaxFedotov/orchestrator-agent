@@ -138,6 +138,9 @@ def test_xtrabackup_gtid(prepare_env, enable_gtid):
         time.sleep(sleep_interval_sec)
 
 def test_cloneplugin_positional(prepare_env, disable_gtid):
+    version = prepare_env["orchestrator"].ssh(command="mysql -BNe 'select @@version'")
+    if version[:1] == '5':
+        pytest.skip("unsupported configuration")
     sleep_interval_sec = 20
     seedID = prepare_env["orchestrator"].ssh(command="curl -X GET http://localhost:3000/api/agent-seed/ClonePlugin/targetagent/sourceagent")
     print(seedID)
@@ -160,6 +163,9 @@ def test_cloneplugin_positional(prepare_env, disable_gtid):
         time.sleep(sleep_interval_sec)
 
 def test_cloneplugin_gtid(prepare_env, enable_gtid):
+    version = prepare_env["orchestrator"].ssh(command="mysql -BNe 'select @@version'")
+    if version[:1] == '5':
+        pytest.skip("unsupported configuration")
     sleep_interval_sec = 20
     seedID = prepare_env["orchestrator"].ssh(command="curl -X GET http://localhost:3000/api/agent-seed/ClonePlugin/targetagent/sourceagent")
     print(seedID)
