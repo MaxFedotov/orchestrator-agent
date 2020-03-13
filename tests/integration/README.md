@@ -1,7 +1,7 @@
 ## Orchestrator-agent integraton tests
 
-This directory contains tests that involve 2 vagrant instances with Orchestrator-agent\MySQL (one for source host, one for target) and 1 vagrant host with Orchestrator\MySQL
-They tests different seed methods with different replication configuration (GTID of positional replication) on MySQL 5.7 or 8.0 versions (this parameter is configurable before a test run).
+This directory contains tests that involve 2 vagrant instances with Orchestrator-agent\MySQL (one for source host, one for target) and 1 vagrant host with Orchestrator\MySQL.  
+They tests different seed methods with different replication configuration (GTID of positional replication) on MySQL 5.7 or 8.0 versions (this parameter is configurable before a test run).  
 
 Prerequisites:
 * Python > 3
@@ -10,17 +10,18 @@ Prerequisites:
 * [Pip](https://pypi.python.org/pypi/pip)
 * [Goreleaser](https://goreleaser.com/install/)
 
-Tests use pytest framework and python bindings for vagrant in order to spawn vagrant VMs. 
-You can install them using pip and following command
+Tests use pytest framework and python bindings for vagrant in order to spawn vagrant VMs.  
+
+You can install them using pip and following command:  
 `pip install -r requirements.txt`
 
-Tests will automatically download specific prepared vagrant boxes from vagrant cloud. Size of box is about 1.2Gb.
+Tests will automatically download specific prepared vagrant boxes from vagrant cloud. Size of box is about 1.2Gb.  
 
-Each test is located in a sepated folder, starting with `test_`
+Each test is located in a sepated folder, starting with `test_`  
 
-Run tests with the `pytest` command. To select which tests to run, use `pytest -k <test_name_pattern>`
+Run tests with the `pytest` command. To select which tests to run, use `pytest -k <test_name_pattern>`  
 
-If you want to enable verbose logging during test ran, use `pytest -v`
+If you want to enable verbose logging during test ran, use `pytest -v`  
 
 Tests have following options, which you can pass to `pytest` command:
 * --mysql_version (57|80) - on which version of MySQL to run tests, default is 57. Please note, that clone_plugin method tests will be ran only using 80 version
