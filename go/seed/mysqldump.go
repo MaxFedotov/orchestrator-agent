@@ -3,6 +3,7 @@ package seed
 import (
 	"fmt"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -105,7 +106,7 @@ func (sm *MysqldumpSeed) Restore() {
 
 func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
 	meta := &SeedMetadata{}
-	output, err := cmd.CommandOutput(fmt.Sprintf("tail -n 100 %s", path.Join(sm.BackupDir, sm.BackupFileName)), sm.ExecWithSudo)
+	output, err := cmd.CommandOutput(fmt.Sprintf("head -n 100 %s", path.Join(sm.BackupDir, sm.BackupFileName)), sm.ExecWithSudo)
 	if err != nil {
 		sm.Logger.WithField("error", err).Info("Unable to read seed metadata")
 		return meta, err
@@ -113,7 +114,8 @@ func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
 	lines := cmd.OutputLines(output)
 	for _, line := range lines {
 		if strings.Contains(line, "GTID_PURGED") {
-			meta.GtidExecuted = strings.Replace(strings.Replace(strings.Split(line, "=")[1], "'", "", -1), ";", "", -1)
+			re := regexp.MustCompile(`'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}).*'`)
+			meta.GtidExecuted = strings.Replace(re.FindString(line), "'", "", -1)
 		}
 		if strings.Contains(line, "CHANGE MASTER") {
 			meta.LogFile = strings.Replace(strings.Split(strings.Split(line, ",")[0], "=")[1], "'", "", -1)

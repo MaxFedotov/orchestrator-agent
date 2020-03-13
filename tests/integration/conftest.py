@@ -4,7 +4,7 @@ import vagrant
 import subprocess
 import sys
 from os import path
-import shutil
+sys.path.append(os.path.join(os.path.dirname(__file__), 'helpers'))
 
 def pytest_addoption(parser):
     parser.addoption("--mysql_version", action="store", choices=["57", "80"], default="57")
@@ -74,12 +74,12 @@ def reset_target_agent():
             box.ssh(command="mysql -e 'RESET MASTER;'")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def prepare_env(pytestconfig):
     vagrant_hosts = {
         "orchestrator": None,
         "sourceagent": None,
-        "targetagent": None
+        "targetagent": None,
     }
     hosts_records = []
     vagrantPath = os.path.join(os.getcwd(), "vagrant/vagrantfiles/mysql_{}/".format(pytestconfig.getoption("mysql_version")))
@@ -157,7 +157,7 @@ def prepare_agent(agent, update_agent,server_id, mysql_version):
         agent.ssh(command="sudo service mysql restart")
     agent.ssh(command="sudo bash -c \"rm -rf /tmp/bkp && mkdir /tmp/bkp && chown -R mysql:mysql /tmp/bkp\"")
     print(agent.ssh(command="sudo yum install -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
-    agent.ssh(command="sudo cp /vagrant/orchestrator-agent_{}.conf /etc/orchestrator-agent.conf && sudo chown mysql:mysql /etc/orchestrator-agent.conf".format(mysql_version))
+    agent.ssh(command="sudo cp /vagrant/orchestrator-agent.conf /etc/orchestrator-agent.conf && sudo chown mysql:mysql /etc/orchestrator-agent.conf")
     agent.ssh(command="sudo systemctl daemon-reload")
     agent.ssh(command="sudo service orchestrator-agent start && sleep 10s")
 

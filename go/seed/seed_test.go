@@ -75,6 +75,28 @@ func (s *SeedTestSuite) TestMysqldumpGetMetadataGtid(c *C) {
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }
 
+func (s *SeedTestSuite) TestMysqldumpGetMetadataGtidMySQL8(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	backupDir := path.Join(workingDir, "../../tests/functional/mysqldump")
+
+	baseConfig := &seed.Base{
+		BackupDir: backupDir,
+	}
+	mysqldump := &seed.MysqldumpSeed{
+		Base:           baseConfig,
+		BackupFileName: "orchestrator_agent_backup_gtid_mysql8.sql",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile:      "mysql-bin.000001",
+		LogPos:       520,
+		GtidExecuted: "d400d115-6565-11ea-bb6f-5254008afee6:1",
+	}
+	metadata, err := mysqldump.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
 func (s *SeedTestSuite) TestMydumperGetMetadataPositional(c *C) {
 	workingDir, err := os.Getwd()
 	c.Assert(err, IsNil)
