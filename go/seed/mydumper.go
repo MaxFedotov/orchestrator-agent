@@ -27,6 +27,7 @@ var defaultMydumperOpts = map[string]bool{
 	"--overwrite-tables": true,
 	"-d":                 true,
 	"--directory":        true,
+	"--no-backup-locks":  true,
 }
 
 type MydumperSeed struct {
@@ -72,7 +73,8 @@ func (sm *MydumperSeed) Backup(seedHost string, mysqlPort int) {
 			addtionalOpts = append(addtionalOpts, opt)
 		}
 	}
-	backupCmd := fmt.Sprintf("mydumper --host %s --user %s --password %s --port %d --outputdir %s %s", seedHost, sm.SeedUser, sm.SeedPassword, mysqlPort, path.Join(sm.BackupDir, sm.BackupFolderName), strings.Join(addtionalOpts, " "))
+	// add --no-backup-locks to mydumper, as they are removed in MySQL 8 and cause mydumper errors
+	backupCmd := fmt.Sprintf("mydumper --no-backup-locks --host %s --user %s --password %s --port %d --outputdir %s %s", seedHost, sm.SeedUser, sm.SeedPassword, mysqlPort, path.Join(sm.BackupDir, sm.BackupFolderName), strings.Join(addtionalOpts, " "))
 	sm.Logger.Info("Starting backup")
 	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)

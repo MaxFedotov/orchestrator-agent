@@ -23,8 +23,9 @@ class OrchestratorWaiter:
             pprint.pprint(seed_status)
             assert seed_status["Status"] != "Failed"
             seed_states = json.loads(self.vagrant_box.ssh(command="curl -X GET http://localhost:3000/api/agent-seed-states/{}".format(int(self.seed_id))))
-            print("******* LAST SEED STATE *******")
-            pprint.pprint(seed_states[0])
+            if len(seed_states) > 0:
+                print("******* LAST SEED STATE *******")
+                pprint.pprint(seed_states[0])
             if seed_status["Status"] == "Completed":
                 return
             print("******* SLEEPING FOR {} SEC *******".format(self.interval))

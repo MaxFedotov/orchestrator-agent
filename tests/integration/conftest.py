@@ -4,6 +4,9 @@ import vagrant
 import subprocess
 import sys
 from os import path
+import random
+import string
+import time
 sys.path.append(os.path.join(os.path.dirname(__file__), 'helpers'))
 
 def pytest_addoption(parser):
@@ -20,26 +23,30 @@ def pytest_configure():
 def enable_gtid():
     for host, box in pytest.vagrant_hosts.items():
         if 'source' in host.lower():
-            print("Enabling gtid {}".format(host))
-            box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON && sudo service mysql restart")
-            box.ssh(command="mysql -BNe \"RESET MASTER\"")
-            box.ssh(command="mysql employees -BNe \"UPDATE employees set first_name='test' WHERE emp_no = 10001\"")
+            print("\nEnabling gtid {}".format(host))
+            box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON")
+            box.ssh(command="sudo service mysql restart")
+            box.ssh(command="mysql -BNe \"RESET MASTER;\"")
+            box.ssh(command="mysql employees -BNe \"UPDATE employees set first_name='{}' WHERE emp_no = 10001;\"".format(''.join(random.choices(string.ascii_uppercase + string.digits, k=10))))
         if 'target' in host.lower():
             print("Enabling gtid {}".format(host))
-            box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON && sudo service mysql restart")
+            box.ssh(command="sudo crudini --set /etc/my.cnf mysqld gtid_mode ON && sudo crudini --set /etc/my.cnf mysqld enforce-gtid-consistency ON")
+            box.ssh(command="sudo service mysql restart")
 
 @pytest.fixture(scope="module")
 def disable_gtid():
     pass
     for host, box in pytest.vagrant_hosts.items():
         if 'source' in host.lower():
-            print("Disabling gtid {}".format(host))
-            box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency && sudo service mysql restart")
+            print("\nDisabling gtid {}".format(host))
+            box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency")
+            box.ssh(command="sudo service mysql restart")
             box.ssh(command="mysql -BNe \"RESET MASTER;\"")
-            box.ssh(command="mysql employees -BNe \"UPDATE employees set first_name='test' WHERE emp_no = 10001\"")
+            box.ssh(command="mysql employees -BNe \"UPDATE employees set first_name='{}' WHERE emp_no = 10001;\"".format(''.join(random.choices(string.ascii_uppercase + string.digits, k=10))))
         if 'target' in host.lower():
             print("Disabling gtid {}".format(host))
-            box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency && sudo service mysql restart")
+            box.ssh(command="sudo crudini --del /etc/my.cnf mysqld gtid_mode && sudo crudini --del /etc/my.cnf mysqld enforce-gtid-consistency")
+            box.ssh(command="sudo service mysql restart")
 
 @pytest.fixture(scope="module")
 def reset_lvm():
@@ -72,6 +79,11 @@ def reset_target_agent():
             box.ssh(command="mysql -e 'DROP DATABASE IF EXISTS sakila;'")
             box.ssh(command="mysql -e 'DROP DATABASE IF EXISTS world;'")
             box.ssh(command="mysql -e 'RESET MASTER;'")
+            box.ssh(command="sudo rm -rf /var/lib/mysql/auto.cnf")
+    pytest.vagrant_hosts["orchestrator"].ssh(command="sudo service orchestrator restart")
+    pytest.vagrant_hosts["targetagent"].ssh(command="sudo service orchestrator-agent restart")
+    pytest.vagrant_hosts["sourceagent"].ssh(command="sudo service orchestrator-agent restart")
+    time.sleep(60)
 
 
 @pytest.fixture(scope="session")
@@ -157,7 +169,7 @@ def prepare_agent(agent, update_agent,server_id, mysql_version):
         agent.ssh(command="sudo service mysql restart")
     agent.ssh(command="sudo bash -c \"rm -rf /tmp/bkp && mkdir /tmp/bkp && chown -R mysql:mysql /tmp/bkp\"")
     print(agent.ssh(command="sudo yum install -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
-    agent.ssh(command="sudo cp /vagrant/orchestrator-agent.conf /etc/orchestrator-agent.conf && sudo chown mysql:mysql /etc/orchestrator-agent.conf")
+    agent.ssh(command="sudo cp /vagrant/orchestrator-agent_{}.conf /etc/orchestrator-agent.conf && sudo chown mysql:mysql /etc/orchestrator-agent.conf".format(mysql_version))
     agent.ssh(command="sudo systemctl daemon-reload")
     agent.ssh(command="sudo service orchestrator-agent start && sleep 10s")
 

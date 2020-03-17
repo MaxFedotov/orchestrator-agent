@@ -78,7 +78,7 @@ func (sm *LVMSeed) Prepare(side Side) {
 			sm.Logger.WithField("error", err).Info("Prepare failed")
 			return
 		}
-		cleanupDatadirCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.MySQLDatadir, "*"))
+		cleanupDatadirCmd := fmt.Sprintf("find %s -mindepth 1 -regex ^.*$ -delete", sm.MySQLDatadir)
 		err := cmd.CommandRunWithFunc(cleanupDatadirCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Cleaning MySQL datadir", sm.StatusChan)
 		})
@@ -147,6 +147,15 @@ func (sm *LVMSeed) Backup(seedHost string, mysqlPort int) {
 
 func (sm *LVMSeed) Restore() {
 	stage := NewSeedStage(Restore, sm.StatusChan)
+	cleanupDatadirCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.MySQLDatadir, "auto.cnf"))
+	err := cmd.CommandRunWithFunc(cleanupDatadirCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		stage.UpdateSeedStatus(Running, cmd, "Removing auto.cnf from MySQL datadir", sm.StatusChan)
+	})
+	if err != nil {
+		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+		sm.Logger.WithField("error", err).Info("Restore failed")
+		return
+	}
 	if err := osagent.MySQLStart(sm.ExecWithSudo); err != nil {
 		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 		sm.Logger.WithField("error", err).Info("Restore failed")

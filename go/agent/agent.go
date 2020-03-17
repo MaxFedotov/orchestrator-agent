@@ -310,8 +310,8 @@ func (agent *Agent) Start() error {
 	}
 	agent.AvailiableSeedMethods = availiableSeedMethods
 	agent.SeedMethods = seedMethods
-	go agent.ContinuousOperation()
 	go agent.ServeHTTP()
+	go agent.ContinuousOperation()
 	go agent.UpdateSeedStatus()
 	return nil
 }
