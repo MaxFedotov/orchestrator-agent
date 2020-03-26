@@ -65,7 +65,7 @@ func main() {
 	app := agent.New(*configFile, defaultLogger)
 
 	if err := app.LoadConfig(); err != nil {
-		defaultLogger.WithField("config", *configFile).Fatal(err)
+		defaultLogger.WithField("error", err).Fatal("Unable to start orchestrator-agent")
 	}
 
 	defaultLogger.WithField("version", version).Info("Starting orchestrator-agent")

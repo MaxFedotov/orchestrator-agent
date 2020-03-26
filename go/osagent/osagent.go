@@ -101,13 +101,13 @@ func GetDiskUsage(path string, execWithSudo bool) (int64, error) {
 	return result, err
 }
 
-// MySQLErrorLogTail returns last 20 lines of MySQL error log
-func GetMySQLErrorLogTail(logFile string, execWithSudo bool) ([]string, error) {
-	output, err := cmd.CommandOutput(fmt.Sprintf("tail -n 20 %s", logFile), execWithSudo)
+// MySQLErrorLogTail returns last 40 lines of MySQL error log
+func GetMySQLErrorLogTail(logFile string, execWithSudo bool) (string, error) {
+	output, err := cmd.CommandOutput(fmt.Sprintf("tail -n 40 %s", logFile), execWithSudo)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	tail := cmd.OutputLines(output)
+	tail := string(output)
 	return tail, nil
 }
 

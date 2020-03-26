@@ -433,8 +433,8 @@ func (agent *Agent) ContinuousOperation() {
 	}
 }
 
-func (agent *Agent) GetMySQLErrorLog() ([]string, error) {
-	var mySQLErrorLogTail []string
+func (agent *Agent) GetMySQLErrorLog() (string, error) {
+	var mySQLErrorLogTail string
 	mySQLLogFile, err := dbagent.GetMySQLLogFile(agent.MySQLClient)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL log file info")
