@@ -74,7 +74,7 @@ func (sm *MydumperSeed) Backup(seedHost string, mysqlPort int) {
 		}
 	}
 	// add --no-backup-locks to mydumper, as they are removed in MySQL 8 and cause mydumper errors
-	backupCmd := fmt.Sprintf("mydumper --no-backup-locks --host %s --user %s --password %s --port %d --outputdir %s %s", seedHost, sm.SeedUser, sm.SeedPassword, mysqlPort, path.Join(sm.BackupDir, sm.BackupFolderName), strings.Join(addtionalOpts, " "))
+	backupCmd := fmt.Sprintf("mydumper --no-backup-locks --host %s --user %s --password %s --port %d --outputdir %s %s", seedHost, sm.User, sm.Password, mysqlPort, path.Join(sm.BackupDir, sm.BackupFolderName), strings.Join(addtionalOpts, " "))
 	sm.Logger.Info("Starting backup")
 	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
@@ -114,7 +114,7 @@ func (sm *MydumperSeed) Restore() {
 		sm.Logger.WithField("error", err).Info("Restore failed")
 		return
 	}
-	restoreCmd := fmt.Sprintf("myloader --host localhost --user %s --password %s --port %d --directory %s --overwrite-tables %s", sm.SeedUser, sm.SeedPassword, sm.MySQLPort, path.Join(sm.BackupDir, sm.BackupFolderName), strings.Join(addtionalOpts, " "))
+	restoreCmd := fmt.Sprintf("myloader --host localhost --user %s --password %s --port %d --directory %s --overwrite-tables %s", sm.User, sm.Password, sm.MySQLPort, path.Join(sm.BackupDir, sm.BackupFolderName), strings.Join(addtionalOpts, " "))
 
 	err := cmd.CommandRunWithFunc(restoreCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running restore", sm.StatusChan)

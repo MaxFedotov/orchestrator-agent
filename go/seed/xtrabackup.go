@@ -120,7 +120,7 @@ func (sm *XtrabackupSeed) Backup(seedHost string, mysqlPort int) {
 			socatConOpts += ",verify=0"
 		}
 	}
-	backupCmd := fmt.Sprintf("socat EXEC:\"xtrabackup --backup --user=%s --password=%s --port=%d --host=127.0.0.1 --stream=xbstream %s\" %s", sm.SeedUser, sm.SeedPassword, mysqlPort, strings.Join(addtionalOpts, " "), socatConOpts)
+	backupCmd := fmt.Sprintf("socat EXEC:\"xtrabackup --backup --user=%s --password=%s --port=%d --host=127.0.0.1 --stream=xbstream %s\" %s", sm.User, sm.Password, mysqlPort, strings.Join(addtionalOpts, " "), socatConOpts)
 	sm.Logger.Info("Starting backup")
 	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)

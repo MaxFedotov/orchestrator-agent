@@ -126,11 +126,11 @@ func (agent *Agent) parseConfig() error {
 	if len(cfg.Orchestrator.URL) == 0 {
 		return fmt.Errorf("orchestrator url not specified")
 	}
-	if len(cfg.Mysql.SeedUser) == 0 {
-		return fmt.Errorf("mysql seed-user not specified")
+	if len(cfg.Mysql.User) == 0 {
+		return fmt.Errorf("mysql user not specified")
 	}
-	if len(cfg.Mysql.SeedPassword) == 0 {
-		return fmt.Errorf("mysql seed-password not specified")
+	if len(cfg.Mysql.Password) == 0 {
+		return fmt.Errorf("mysql password not specified")
 	}
 	if cfg.LVM.Enabled {
 		if len(cfg.LVM.CreateSnapshotCommand) == 0 {
@@ -204,7 +204,7 @@ func (agent *Agent) Start() error {
 
 	agent.HTTPClient = http.InitHTTPClient(agent.Config.Common.HTTPTimeout, agent.Config.Common.SSLSkipVerify, agent.Config.Common.SSLCAFile, agent.Config.Common.UseMutualTLS, agent.Config.Common.SSLCertFile, agent.Config.Common.SSLPrivateKeyFile, agent.Logger)
 
-	agent.MySQLClient, err = dbagent.NewMySQLClient(agent.Config.Mysql.SeedUser, agent.Config.Mysql.SeedPassword, agent.Config.Mysql.Port)
+	agent.MySQLClient, err = dbagent.NewMySQLClient(agent.Config.Mysql.User, agent.Config.Mysql.Password, agent.Config.Mysql.Port)
 	if err != nil {
 		return fmt.Errorf("Unable to connect to MySQL: %+v", err)
 	}
@@ -223,8 +223,8 @@ func (agent *Agent) Start() error {
 		MySQLClient:  agent.MySQLClient,
 		MySQLPort:    agent.Config.Mysql.Port,
 		MySQLDatadir: agent.MySQLDatadir,
-		SeedUser:     agent.Config.Mysql.SeedUser,
-		SeedPassword: agent.Config.Mysql.SeedPassword,
+		User:         agent.Config.Mysql.User,
+		Password:     agent.Config.Mysql.Password,
 		ExecWithSudo: agent.Config.Common.ExecWithSudo,
 		SeedPort:     agent.Config.Common.SeedPort,
 		BackupDir:    agent.Config.Common.BackupDir,

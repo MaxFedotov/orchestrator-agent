@@ -97,7 +97,7 @@ func (sm *ClonePluginSeed) Backup(seedHost string, mysqlPort int) {
 		sm.Logger.WithField("error", err).Info("Backup failed")
 		return
 	}
-	cloneCmd := fmt.Sprintf("mysql --user=%s --password=%s --host=127.0.0.1 --port=%d -BNe \"CLONE INSTANCE FROM %s@%s:%d identified by '%s';\"", sm.SeedUser, sm.SeedPassword, sm.MySQLPort, sm.SeedUser, seedHost, mysqlPort, sm.SeedPassword)
+	cloneCmd := fmt.Sprintf("mysql --user=%s --password=%s --host=127.0.0.1 --port=%d -BNe \"CLONE INSTANCE FROM %s@%s:%d identified by '%s';\"", sm.User, sm.Password, sm.MySQLPort, sm.User, seedHost, mysqlPort, sm.Password)
 	err := cmd.CommandRunWithFunc(cloneCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
 	})

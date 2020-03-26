@@ -68,7 +68,7 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 			addtionalOpts = append(addtionalOpts, opt)
 		}
 	}
-	backupCmd := fmt.Sprintf("mysqldump --host=%s --user=%s --password=%s --port=%d --master-data=2 --all-databases %s", seedHost, sm.SeedUser, sm.SeedPassword, mysqlPort, strings.Join(addtionalOpts, " "))
+	backupCmd := fmt.Sprintf("mysqldump --host=%s --user=%s --password=%s --port=%d --master-data=2 --all-databases %s", seedHost, sm.User, sm.Password, mysqlPort, strings.Join(addtionalOpts, " "))
 	backupCmd += fmt.Sprintf(" > %s", path.Join(sm.BackupDir, sm.BackupFileName))
 	sm.Logger.Info("Starting backup")
 	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
@@ -91,7 +91,7 @@ func (sm *MysqldumpSeed) Restore() {
 		sm.Logger.WithField("error", err).Info("Restore failed")
 		return
 	}
-	restoreCmd := fmt.Sprintf("cat %s | mysql -u%s -p%s --port %d", path.Join(sm.BackupDir, sm.BackupFileName), sm.SeedUser, sm.SeedPassword, sm.MySQLPort)
+	restoreCmd := fmt.Sprintf("cat %s | mysql -u%s -p%s --port %d", path.Join(sm.BackupDir, sm.BackupFileName), sm.User, sm.Password, sm.MySQLPort)
 	err := cmd.CommandRunWithFunc(restoreCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running restore", sm.StatusChan)
 	})

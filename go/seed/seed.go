@@ -74,8 +74,8 @@ type Base struct {
 	MySQLClient  *mysql.MySQLClient
 	MySQLPort    int
 	MySQLDatadir string
-	SeedUser     string
-	SeedPassword string
+	User         string
+	Password     string
 	ExecWithSudo bool
 	SeedPort     int
 	BackupDir    string

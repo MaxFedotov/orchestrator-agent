@@ -331,7 +331,7 @@ func (this *HttpAPI) ApplyRelaylogContents(params martini.Params, r render.Rende
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	err = osagent.ApplyRelaylogContents(body, agent.Config.Common.ExecWithSudo, agent.Config.Mysql.SeedUser, agent.Config.Mysql.SeedPassword)
+	err = osagent.ApplyRelaylogContents(body, agent.Config.Common.ExecWithSudo, agent.Config.Mysql.User, agent.Config.Mysql.Password)
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to apply relay log contents")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})

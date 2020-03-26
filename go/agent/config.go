@@ -47,9 +47,9 @@ type loggingConfig struct {
 }
 
 type mysqlConfig struct {
-	Port         int    `toml:"port"`
-	SeedUser     string `toml:"seed-user"`
-	SeedPassword string `toml:"seed-password"`
+	Port     int    `toml:"port"`
+	User     string `toml:"user"`
+	Password string `toml:"password"`
 }
 
 // Config is used to store all configuration parameters
@@ -110,9 +110,9 @@ func NewConfig() *Config {
 			Level: "Info",
 		},
 		Mysql: mysqlConfig{
-			Port:         3306,
-			SeedUser:     "",
-			SeedPassword: "",
+			Port:     3306,
+			User:     "",
+			Password: "",
 		},
 		MysqlDump: &seed.MysqldumpConfig{
 			Enabled:                 true,

@@ -34,3 +34,11 @@ How to SSH to vagrant box:
 * change directory to a folder, where vagrant file with mysql version you specified when starting tests is located (integration/vagrant/vagrantfiles/mysql_57 or integration/vagrant/vagrantfiles/mysql_80)
 * `EXPORT hostname={$name_of_the_VM_you_want_to_ssh}`, it can be one of the orchestrator|targetagent|sourceagent
 * execute `vagrant ssh` command
+
+On MacOS you can add following to `/etc/sudoers` in order to prevent asking every time for root password when starting vagrant:
+```console
+Cmnd_Alias VAGRANT_EXPORTS_ADD = /usr/bin/tee -a /etc/exports
+Cmnd_Alias VAGRANT_NFSD = /sbin/nfsd restart
+Cmnd_Alias VAGRANT_EXPORTS_REMOVE = /usr/bin/sed -E -e /*/ d -ibak /etc/exports
+%admin ALL=(root) NOPASSWD: VAGRANT_EXPORTS_ADD, VAGRANT_NFSD, VAGRANT_EXPORTS_REMOVE
+```
