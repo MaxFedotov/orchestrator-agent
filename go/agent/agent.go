@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	nethttp "net/http"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,7 @@ import (
 
 type Agent struct {
 	Info                  *Info
+	SystemInfo            *SystemInfo
 	AvailiableSeedMethods map[seed.Method]*seed.MethodOpts
 	MySQLDatadir          string
 	Config                *Config
@@ -75,10 +77,10 @@ type ActiveSeed struct {
 }
 
 type Data struct {
-	LocalSnapshotsHosts   []string                 // AvailableLocalSnapshots in Orchestrator
-	SnaphostHosts         []string                 // AvailableSnapshots in Orchestrator
-	LogicalVolumes        []*osagent.LogicalVolume // pass by reference ??
-	MountPoint            *osagent.Mount           // pass by reference ??
+	LocalSnapshotsHosts   []string
+	SnaphostHosts         []string
+	LogicalVolumes        []*osagent.LogicalVolume
+	MountPoint            *osagent.Mount
 	BackupDir             string
 	BackupDirDiskFree     int64
 	BackupDirDiskUsed     int64
@@ -88,6 +90,16 @@ type Data struct {
 	MySQLDatadirDiskFree  int64
 	MySQLDatabases        map[string]*dbagent.MySQLDatabase
 	AvailiableSeedMethods map[seed.Method]*seed.MethodOpts
+	AgentCommands         []string
+	NumCPU                int
+	MemTotal              int64
+	OsName                string
+}
+
+type SystemInfo struct {
+	NumCPU   int
+	MemTotal int64
+	OsName   string
 }
 
 // New creates new instance of orchestrator-agent
@@ -310,6 +322,16 @@ func (agent *Agent) Start() error {
 	}
 	agent.AvailiableSeedMethods = availiableSeedMethods
 	agent.SeedMethods = seedMethods
+	agent.SystemInfo = &SystemInfo{}
+	agent.SystemInfo.NumCPU = runtime.NumCPU()
+	agent.SystemInfo.MemTotal, err = osagent.GetMemoryTotal(agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get host total memory info")
+	}
+	agent.SystemInfo.OsName, err = osagent.GetOSName(agent.Config.Common.ExecWithSudo)
+	if err != nil {
+		agent.Logger.WithField("error", err).Error("Unable to get OS name")
+	}
 	go agent.ServeHTTP()
 	go agent.ContinuousOperation()
 	go agent.UpdateSeedStatus()
@@ -497,5 +519,11 @@ func (agent *Agent) GetAgentData() *Data {
 	if err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to get MySQL databases info")
 	}
+	for command := range agent.Config.CustomCommands {
+		agentData.AgentCommands = append(agentData.AgentCommands, command)
+	}
+	agentData.NumCPU = agent.SystemInfo.NumCPU
+	agentData.MemTotal = agent.SystemInfo.MemTotal
+	agentData.OsName = agent.SystemInfo.OsName
 	return agentData
 }

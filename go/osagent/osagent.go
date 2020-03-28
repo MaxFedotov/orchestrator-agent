@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/github/orchestrator-agent/go/helper/cmd"
@@ -107,8 +108,7 @@ func GetMySQLErrorLogTail(logFile string, execWithSudo bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tail := string(output)
-	return tail, nil
+	return string(output), nil
 }
 
 func CheckPermissionsOnFolder(folder string, execWithSudo bool) error {
@@ -121,4 +121,26 @@ func MySQLStop(execWithSudo bool) error {
 
 func MySQLStart(execWithSudo bool) error {
 	return cmd.CommandRun("systemctl start mysqld", execWithSudo)
+}
+
+// GetOSName returns OS name
+func GetOSName(execWithSudo bool) (string, error) {
+	output, err := cmd.CommandOutput("hostnamectl | grep 'Operating System' | awk -F \":\" '{print $NF}'", execWithSudo)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), err
+}
+
+// GetMemoryTotal returns total availiable system memory
+func GetMemoryTotal(execWithSudo bool) (int64, error) {
+	output, err := cmd.CommandOutput("grep MemTotal /proc/meminfo | awk '{print $2}'", execWithSudo)
+	if err != nil {
+		return 0, err
+	}
+	mem, err := strconv.ParseInt(strings.TrimSpace(string(output)), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return mem * 1024, err
 }
