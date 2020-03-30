@@ -10,6 +10,7 @@ checksum:
   algorithm: sha256
 release:
   draft: true
+  disable: true
 builds:
 -
   dir: go
