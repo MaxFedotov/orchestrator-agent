@@ -2,6 +2,14 @@
 before:
   hooks:
     - go mod download
+snapshot:
+  name_template: "0.0.1"
+env_files:
+  github_token: ~/.github_token
+checksum:
+  algorithm: sha256
+release:
+  draft: true
 builds:
 -
   dir: go
@@ -10,17 +18,28 @@ builds:
     - linux
   goarch:
     - amd64
+  hooks:
+    post: ./scripts/rpm_build.sh -v {{ .Version }}
 env:
   - CGO_ENABLED=0
   - GO111MODULE=on
 archives:
 - 
+  id: systemd
   replacements:
     amd64: x86_64
   files:
     - conf/*
-    - etc/*
+    - etc/systemd/*
   name_template: "{{ .ProjectName }}-{{ .Version }}.{{ .Arch }}"
+-
+  id: sysv
+  replacements:
+    amd64: x86_64
+  files:
+    - conf/*
+    - etc/init.d/*
+  name_template: "{{ .ProjectName }}-sysv-{{ .Version }}.{{ .Arch }}"
 nfpms:
 -
   id: systemd
@@ -32,7 +51,6 @@ nfpms:
   license: Apache 2.0
   formats:
     - deb
-    - rpm
   dependencies:
     - socat
   bindir: /usr/bin
@@ -59,7 +77,6 @@ nfpms:
   license: Apache 2.0
   formats:
     - deb
-    - rpm
   dependencies:
     - socat
   bindir: /usr/bin
