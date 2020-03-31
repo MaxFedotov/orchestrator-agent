@@ -138,6 +138,9 @@ func (agent *Agent) parseConfig() error {
 	if len(cfg.Orchestrator.URL) == 0 {
 		return fmt.Errorf("orchestrator url not specified")
 	}
+	if !strings.HasPrefix(cfg.Orchestrator.URL, "http://") && !strings.HasPrefix(cfg.Orchestrator.URL, "https://") {
+		cfg.Orchestrator.URL = "http://" + cfg.Orchestrator.URL
+	}
 	if len(cfg.Mysql.User) == 0 {
 		return fmt.Errorf("mysql user not specified")
 	}
