@@ -11,7 +11,7 @@ ExecStart=/usr/bin/orchestrator-agent
 EnvironmentFile=-/etc/sysconfig/orchestrator-agent
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
-RestartSec=60s
+RestartSec=10s
 
 [Install]
 WantedBy=multi-user.target

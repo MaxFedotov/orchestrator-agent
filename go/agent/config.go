@@ -27,6 +27,7 @@ type commonConfig struct {
 	TokenHintFile         string           `toml:"token-hint-file"`
 	TokenHTTPHeader       string           `toml:"token-http-header"`
 	ExecWithSudo          bool             `toml:"exec-with-sudo"`
+	SudoUser              string           `toml:"sudo-user"`
 	BackupDir             string           `toml:"backup-dir"`
 	StatusEndpoint        string           `toml:"status-endpoint"`
 	StatusBadSeconds      *config.Duration `toml:"status-bad-seconds"`
@@ -47,9 +48,12 @@ type loggingConfig struct {
 }
 
 type mysqlConfig struct {
-	Port     int    `toml:"port"`
-	User     string `toml:"user"`
-	Password string `toml:"password"`
+	Port                 int    `toml:"port"`
+	User                 string `toml:"user"`
+	Password             string `toml:"password"`
+	ServiceStatusCommand string `toml:"service-status-command"`
+	ServiceStartCommand  string `toml:"service-start-command"`
+	ServiceStopCommand   string `toml:"service-stop-command"`
 }
 
 // Config is used to store all configuration parameters
@@ -94,7 +98,8 @@ func NewConfig() *Config {
 			TokenHintFile:     "",
 			TokenHTTPHeader:   "",
 			ExecWithSudo:      false,
-			BackupDir:         "", // directory to put backup or mount snapshot
+			SudoUser:          "",
+			BackupDir:         "",
 			StatusEndpoint:    "/api/status",
 			StatusBadSeconds: &config.Duration{
 				Duration: 300 * time.Second,
@@ -110,9 +115,12 @@ func NewConfig() *Config {
 			Level: "Info",
 		},
 		Mysql: mysqlConfig{
-			Port:     3306,
-			User:     "",
-			Password: "",
+			Port:                 3306,
+			User:                 "",
+			Password:             "",
+			ServiceStatusCommand: "systemctl check mysqld",
+			ServiceStartCommand:  "systemctl start mysqld",
+			ServiceStopCommand:   "systemctl stop mysqld",
 		},
 		MysqlDump: &seed.MysqldumpConfig{
 			Enabled:                 true,

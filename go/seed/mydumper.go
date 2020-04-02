@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/openark/golib/sqlutils"
 	log "github.com/sirupsen/logrus"
@@ -50,7 +49,7 @@ func (sm *MydumperSeed) Prepare(side Side) {
 	sm.Logger.Info("Starting prepare")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFolderName))
-		err := cmd.CommandRunWithFunc(cleanupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		err := sm.Cmd.CommandRunWithFunc(cleanupCmd, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Running prepare", sm.StatusChan)
 		})
 		if err != nil {
@@ -76,7 +75,7 @@ func (sm *MydumperSeed) Backup(seedHost string, mysqlPort int) {
 	// add --no-backup-locks to mydumper, as they are removed in MySQL 8 and cause mydumper errors
 	backupCmd := fmt.Sprintf("mydumper --no-backup-locks --host %s --user %s --password %s --port %d --outputdir %s %s", seedHost, sm.User, sm.Password, mysqlPort, path.Join(sm.BackupDir, sm.BackupFolderName), strings.Join(addtionalOpts, " "))
 	sm.Logger.Info("Starting backup")
-	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err := sm.Cmd.CommandRunWithFunc(backupCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
 	})
 	if err != nil {
@@ -116,7 +115,7 @@ func (sm *MydumperSeed) Restore() {
 	}
 	restoreCmd := fmt.Sprintf("myloader --host localhost --user %s --password %s --port %d --directory %s --overwrite-tables %s", sm.User, sm.Password, sm.MySQLPort, path.Join(sm.BackupDir, sm.BackupFolderName), strings.Join(addtionalOpts, " "))
 
-	err := cmd.CommandRunWithFunc(restoreCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err := sm.Cmd.CommandRunWithFunc(restoreCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running restore", sm.StatusChan)
 	})
 	if err != nil {
@@ -135,12 +134,12 @@ func (sm *MydumperSeed) Restore() {
 
 func (sm *MydumperSeed) GetMetadata() (*SeedMetadata, error) {
 	meta := &SeedMetadata{}
-	output, err := cmd.CommandOutput(fmt.Sprintf("cat %s", path.Join(sm.BackupDir, sm.BackupFolderName, sm.MetadataFileName)), sm.ExecWithSudo)
+	output, err := sm.Cmd.CommandOutput(fmt.Sprintf("cat %s", path.Join(sm.BackupDir, sm.BackupFolderName, sm.MetadataFileName)))
 	if err != nil {
 		sm.Logger.WithField("error", err).Info("Unable to read seed metadata")
 		return meta, err
 	}
-	lines := cmd.OutputLines(output)
+	lines := sm.Cmd.OutputLines(output)
 	for _, line := range lines {
 		if strings.Contains(line, "Log:") {
 			meta.LogFile = strings.Trim(strings.Split(line, ":")[1], " ")
@@ -165,7 +164,7 @@ func (sm *MydumperSeed) Cleanup(side Side) {
 	sm.Logger.Info("Starting cleanup")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFolderName))
-		err := cmd.CommandRunWithFunc(cleanupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		err := sm.Cmd.CommandRunWithFunc(cleanupCmd, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Running cleanup", sm.StatusChan)
 		})
 		if err != nil {
@@ -179,7 +178,7 @@ func (sm *MydumperSeed) Cleanup(side Side) {
 }
 
 func (sm *MydumperSeed) isAvailable() bool {
-	err := cmd.CommandRun("mydumper --version", sm.ExecWithSudo)
+	err := sm.Cmd.CommandRun("mydumper --version")
 	if err != nil {
 		return false
 	}

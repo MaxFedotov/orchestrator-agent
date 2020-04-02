@@ -96,8 +96,9 @@ func (this *HttpAPI) MountLV(params martini.Params, r render.Render, req *http.R
 	if lv == "" {
 		lv = req.URL.Query().Get("lv")
 	}
-	output, err := osagent.MountLV(agent.Config.Common.BackupDir, lv, agent.Config.Common.ExecWithSudo)
+	output, err := osagent.MountLV(agent.Config.Common.BackupDir, lv, agent.Cmd)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute MountLV")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -113,8 +114,9 @@ func (this *HttpAPI) RemoveLV(params martini.Params, r render.Render, req *http.
 	if lv == "" {
 		lv = req.URL.Query().Get("lv")
 	}
-	err := osagent.RemoveLV(lv, agent.Config.Common.ExecWithSudo)
+	err := osagent.RemoveLV(lv, agent.Cmd)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute RemoveLV")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -126,8 +128,9 @@ func (this *HttpAPI) Unmount(params martini.Params, r render.Render, req *http.R
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	err := osagent.Unmount(agent.Config.Common.BackupDir, agent.Config.Common.ExecWithSudo)
+	err := osagent.Unmount(agent.Config.Common.BackupDir, agent.Cmd)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute Unmount")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -139,8 +142,9 @@ func (this *HttpAPI) CreateSnapshot(params martini.Params, r render.Render, req 
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	err := osagent.CreateSnapshot(agent.Config.LVM.CreateSnapshotCommand, agent.Config.Common.ExecWithSudo)
+	err := osagent.CreateSnapshot(agent.Config.LVM.CreateSnapshotCommand, agent.Cmd)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute CreateSnapshot")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -152,8 +156,9 @@ func (this *HttpAPI) MySQLStop(params martini.Params, r render.Render, req *http
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	err := osagent.MySQLStop(agent.Config.Common.ExecWithSudo)
+	err := osagent.MySQLStop(agent.Config.Mysql.ServiceStopCommand, agent.Cmd)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute MySQLStop")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -165,8 +170,9 @@ func (this *HttpAPI) MySQLStart(params martini.Params, r render.Render, req *htt
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
-	err := osagent.MySQLStart(agent.Config.Common.ExecWithSudo)
+	err := osagent.MySQLStart(agent.Config.Mysql.ServiceStartCommand, agent.Cmd)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute MySQLStart")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -180,6 +186,7 @@ func (this *HttpAPI) MySQLErrorLogTail(params martini.Params, r render.Render, r
 	}
 	output, err := agent.GetMySQLErrorLog()
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute MySQLErrorLogTail")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -203,9 +210,9 @@ func (this *HttpAPI) RelayLogIndexFile(params martini.Params, r render.Render, r
 		return
 	}
 
-	output, err := osagent.GetRelayLogIndexFileName(agent.MySQLDatadir, agent.Config.Common.ExecWithSudo)
+	output, err := osagent.GetRelayLogIndexFileName(agent.MySQLDatadir, agent.Cmd)
 	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to find relay log index file")
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute RelayLogIndexFile")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -218,9 +225,9 @@ func (this *HttpAPI) RelayLogFiles(params martini.Params, r render.Render, req *
 		return
 	}
 
-	output, err := osagent.GetRelayLogFileNames(agent.MySQLDatadir, agent.Config.Common.ExecWithSudo)
+	output, err := osagent.GetRelayLogFileNames(agent.MySQLDatadir, agent.Cmd)
 	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to find active relay logs")
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute RelayLogFiles")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -233,9 +240,9 @@ func (this *HttpAPI) RelayLogEndCoordinates(params martini.Params, r render.Rend
 		return
 	}
 
-	coordinates, err := osagent.GetRelayLogEndCoordinates(agent.MySQLDatadir, agent.Config.Common.ExecWithSudo)
+	coordinates, err := osagent.GetRelayLogEndCoordinates(agent.MySQLDatadir, agent.Cmd)
 	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to get relay log end coordinates")
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute RelayLogEndCoordinates")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -257,7 +264,7 @@ func (this *HttpAPI) RelaylogContentsTail(params martini.Params, r render.Render
 	}
 	firstRelaylog := params["relaylog"]
 	var parseRelaylogs []string
-	if existingRelaylogs, err := osagent.GetRelayLogFileNames(agent.MySQLDatadir, agent.Config.Common.ExecWithSudo); err != nil {
+	if existingRelaylogs, err := osagent.GetRelayLogFileNames(agent.MySQLDatadir, agent.Cmd); err != nil {
 		agent.Logger.WithField("error", err).Error("Unable to find active relay logs")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
@@ -270,8 +277,9 @@ func (this *HttpAPI) RelaylogContentsTail(params martini.Params, r render.Render
 		}
 	}
 
-	output, err := osagent.MySQLBinlogBinaryContents(parseRelaylogs, startPosition, 0, agent.Config.Common.ExecWithSudo)
+	output, err := osagent.MySQLBinlogBinaryContents(parseRelaylogs, startPosition, 0, agent.Cmd)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute RelaylogContentsTail")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -280,7 +288,7 @@ func (this *HttpAPI) RelaylogContentsTail(params martini.Params, r render.Render
 
 // binlogContents returns contents of binary log entries
 func (this *HttpAPI) binlogContents(params martini.Params, r render.Render, req *http.Request, agent *Agent,
-	contentsFunc func(binlogFiles []string, startPosition int64, stopPosition int64, ExecWithSudo bool) (string, error),
+	contentsFunc func(binlogFiles []string, startPosition int64, stopPosition int64, cmd *cmd.CmdOpts) (string, error),
 ) {
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
@@ -301,8 +309,9 @@ func (this *HttpAPI) binlogContents(params martini.Params, r render.Render, req 
 		}
 	}
 	binlogFileNames := req.URL.Query()["binlog"]
-	output, err := osagent.MySQLBinlogContents(binlogFileNames, startPosition, stopPosition, agent.Config.Common.ExecWithSudo)
+	output, err := osagent.MySQLBinlogContents(binlogFileNames, startPosition, stopPosition, agent.Cmd)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute binlogContents")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
@@ -328,25 +337,31 @@ func (this *HttpAPI) ApplyRelaylogContents(params martini.Params, r render.Rende
 
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute ApplyRelaylogContents")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
-	err = osagent.ApplyRelaylogContents(body, agent.Config.Common.ExecWithSudo, agent.Config.Mysql.User, agent.Config.Mysql.Password)
+	err = osagent.ApplyRelaylogContents(body, agent.Cmd, agent.Config.Mysql.User, agent.Config.Mysql.Password)
 	if err != nil {
-		agent.Logger.WithField("error", err).Error("Unable to apply relay log contents")
+		agent.Logger.WithFields(log.Fields{"error": err}).Error("Unable to execute ApplyRelaylogContents")
 		r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 		return
 	}
 	r.JSON(200, "OK")
 }
 
-// getAgent returns information about agent
+// getAgentData returns information about agent
 func (this *HttpAPI) getAgentData(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
 	if err := this.validateToken(r, req, agent); err != nil {
 		return
 	}
 	output := agent.GetAgentData()
 	r.JSON(200, output)
+}
+
+// getAgentInfo returns information about agent
+func (this *HttpAPI) getAgentInfo(params martini.Params, r render.Render, req *http.Request, agent *Agent) {
+	r.JSON(200, agent.Info)
 }
 
 // Prepare starts prepare stage for seed
@@ -583,8 +598,9 @@ func (this *HttpAPI) postSeedCmd(params martini.Params, r render.Render, req *ht
 		return
 	}
 	if _, ok := agent.Config.CustomCommands["post-seed-command"]; ok {
-		commandOutput, err := cmd.CommandOutput(agent.Config.CustomCommands["post-seed-command"].Cmd, agent.Config.Common.ExecWithSudo)
+		commandOutput, err := agent.Cmd.CommandOutput(agent.Config.CustomCommands["post-seed-command"].Cmd)
 		if err != nil {
+			agent.Logger.WithFields(log.Fields{"error": err, "command": agent.Config.CustomCommands["post-seed-command"]}).Error("Unable to execute post-seed command")
 			r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 			return
 		}
@@ -676,8 +692,9 @@ func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *htt
 		return
 	}
 	if _, ok := agent.Config.CustomCommands[params["cmd"]]; ok {
-		commandOutput, err := cmd.CommandOutput(agent.Config.CustomCommands[params["cmd"]].Cmd, agent.Config.Common.ExecWithSudo)
+		commandOutput, err := agent.Cmd.CommandOutput(agent.Config.CustomCommands[params["cmd"]].Cmd)
 		if err != nil {
+			agent.Logger.WithFields(log.Fields{"error": err, "command": agent.Config.CustomCommands[params["cmd"]]}).Error("Unable to execute custom-command")
 			r.JSON(500, &APIResponse{Code: ERROR, Message: err.Error()})
 			return
 		}
@@ -692,10 +709,10 @@ func (this *HttpAPI) RunCommand(params martini.Params, r render.Render, req *htt
 // RegisterRequests makes for the de-facto list of known API calls
 func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	// commands LVM
-	m.Get("/api/mountlv", this.MountLV)                // MountLV mounts a snapshot on config mount point (Backup) ++
-	m.Get("/api/removelv", this.RemoveLV)              // RemoveLV removes a snapshot ++
-	m.Get("/api/umount", this.Unmount)                 // Unmount umounts the config mount point (Cleanup) ++
-	m.Get("/api/create-snapshot", this.CreateSnapshot) // CreateSnapshot creates snapshot for this host ++
+	m.Get("/api/mountlv", this.MountLV)
+	m.Get("/api/removelv", this.RemoveLV)
+	m.Get("/api/umount", this.Unmount)
+	m.Get("/api/create-snapshot", this.CreateSnapshot)
 	m.Get(config.Config.StatusEndpoint, this.Status)
 
 	// commands MySQL
@@ -705,6 +722,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 
 	// status
 	m.Get("/api/get-agent-data", this.getAgentData)
+	m.Get("/api/get-agent-info", this.getAgentInfo)
 
 	// seed process
 	m.Get("/api/prepare/:seedID/:seedMethod/:seedSide", this.Prepare)

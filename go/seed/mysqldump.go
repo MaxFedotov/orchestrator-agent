@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/pipe.v2"
@@ -45,7 +44,7 @@ func (sm *MysqldumpSeed) Prepare(side Side) {
 	sm.Logger.Info("Starting prepare")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFileName))
-		err := cmd.CommandRunWithFunc(cleanupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		err := sm.Cmd.CommandRunWithFunc(cleanupCmd, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Running prepare", sm.StatusChan)
 		})
 		if err != nil {
@@ -71,7 +70,7 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 	backupCmd := fmt.Sprintf("mysqldump --host=%s --user=%s --password=%s --port=%d --master-data=2 --all-databases %s", seedHost, sm.User, sm.Password, mysqlPort, strings.Join(addtionalOpts, " "))
 	backupCmd += fmt.Sprintf(" > %s", path.Join(sm.BackupDir, sm.BackupFileName))
 	sm.Logger.Info("Starting backup")
-	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err := sm.Cmd.CommandRunWithFunc(backupCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
 	})
 	if err != nil {
@@ -92,7 +91,7 @@ func (sm *MysqldumpSeed) Restore() {
 		return
 	}
 	restoreCmd := fmt.Sprintf("cat %s | mysql -u%s -p%s --port %d", path.Join(sm.BackupDir, sm.BackupFileName), sm.User, sm.Password, sm.MySQLPort)
-	err := cmd.CommandRunWithFunc(restoreCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err := sm.Cmd.CommandRunWithFunc(restoreCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running restore", sm.StatusChan)
 	})
 	if err != nil {
@@ -106,12 +105,12 @@ func (sm *MysqldumpSeed) Restore() {
 
 func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
 	meta := &SeedMetadata{}
-	output, err := cmd.CommandOutput(fmt.Sprintf("head -n 100 %s", path.Join(sm.BackupDir, sm.BackupFileName)), sm.ExecWithSudo)
+	output, err := sm.Cmd.CommandOutput(fmt.Sprintf("head -n 100 %s", path.Join(sm.BackupDir, sm.BackupFileName)))
 	if err != nil {
 		sm.Logger.WithField("error", err).Info("Unable to read seed metadata")
 		return meta, err
 	}
-	lines := cmd.OutputLines(output)
+	lines := sm.Cmd.OutputLines(output)
 	for _, line := range lines {
 		if strings.Contains(line, "GTID_PURGED") {
 			re := regexp.MustCompile(`'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}).*'`)
@@ -135,7 +134,7 @@ func (sm *MysqldumpSeed) Cleanup(side Side) {
 	sm.Logger.Info("Starting cleanup")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFileName))
-		err := cmd.CommandRunWithFunc(cleanupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		err := sm.Cmd.CommandRunWithFunc(cleanupCmd, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Running cleanup", sm.StatusChan)
 		})
 		if err != nil {
@@ -149,7 +148,7 @@ func (sm *MysqldumpSeed) Cleanup(side Side) {
 }
 
 func (sm *MysqldumpSeed) isAvailable() bool {
-	err := cmd.CommandRun("mysqldump --version", sm.ExecWithSudo)
+	err := sm.Cmd.CommandRun("mysqldump --version")
 	if err != nil {
 		return false
 	}

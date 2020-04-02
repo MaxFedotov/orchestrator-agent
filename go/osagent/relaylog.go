@@ -12,8 +12,8 @@ import (
 )
 
 // GetRelayLogIndexFileName attempts to find the relay log index file under the mysql datadir
-func GetRelayLogIndexFileName(mysqlDataDir string, execWithSudo bool) (string, error) {
-	output, err := cmd.CommandOutput(fmt.Sprintf("ls %s/*relay*.index", mysqlDataDir), execWithSudo)
+func GetRelayLogIndexFileName(mysqlDataDir string, cmd *cmd.CmdOpts) (string, error) {
+	output, err := cmd.CommandOutput(fmt.Sprintf("ls %s/*relay*.index", mysqlDataDir))
 	if err != nil {
 		return "", err
 	}
@@ -22,8 +22,8 @@ func GetRelayLogIndexFileName(mysqlDataDir string, execWithSudo bool) (string, e
 }
 
 // GetRelayLogFileNames attempts to find the active relay logs
-func GetRelayLogFileNames(mysqlDataDir string, execWithSudo bool) (fileNames []string, err error) {
-	relayLogIndexFile, err := GetRelayLogIndexFileName(mysqlDataDir, execWithSudo)
+func GetRelayLogFileNames(mysqlDataDir string, cmd *cmd.CmdOpts) (fileNames []string, err error) {
+	relayLogIndexFile, err := GetRelayLogIndexFileName(mysqlDataDir, cmd)
 	if err != nil {
 		return fileNames, err
 	}
@@ -43,14 +43,14 @@ func GetRelayLogFileNames(mysqlDataDir string, execWithSudo bool) (fileNames []s
 }
 
 // GetRelayLogEndCoordinates returns the coordinates at the end of relay logs
-func GetRelayLogEndCoordinates(mysqlDataDir string, execWithSudo bool) (coordinates *inst.BinlogCoordinates, err error) {
-	relaylogFileNames, err := GetRelayLogFileNames(mysqlDataDir, execWithSudo)
+func GetRelayLogEndCoordinates(mysqlDataDir string, cmd *cmd.CmdOpts) (coordinates *inst.BinlogCoordinates, err error) {
+	relaylogFileNames, err := GetRelayLogFileNames(mysqlDataDir, cmd)
 	if err != nil {
 		return coordinates, err
 	}
 
 	lastRelayLogFile := relaylogFileNames[len(relaylogFileNames)-1]
-	output, err := cmd.CommandOutput(fmt.Sprintf("du -b %s", lastRelayLogFile), execWithSudo)
+	output, err := cmd.CommandOutput(fmt.Sprintf("du -b %s", lastRelayLogFile))
 	tokens := cmd.OutputTokens(`[ \t]+`, output)
 	var fileSize int64
 	for _, lineTokens := range tokens {
@@ -62,7 +62,7 @@ func GetRelayLogEndCoordinates(mysqlDataDir string, execWithSudo bool) (coordina
 	return &inst.BinlogCoordinates{LogFile: lastRelayLogFile, LogPos: fileSize, Type: inst.RelayLog}, nil
 }
 
-func ApplyRelaylogContents(content []byte, execWithSudo bool, mysqlUser string, mysqlPassword string) error {
+func ApplyRelaylogContents(content []byte, cmd *cmd.CmdOpts, mysqlUser string, mysqlPassword string) error {
 	encodedContentsFile, err := ioutil.TempFile("", "orchestrator-agent-apply-relaylog-encoded-")
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func ApplyRelaylogContents(content []byte, execWithSudo bool, mysqlUser string, 
 	}
 
 	command := fmt.Sprintf("cat %s | base64 --decode | gunzip > %s", encodedContentsFile.Name(), relaylogContentsFile.Name())
-	if err := cmd.CommandRun(command, execWithSudo); err != nil {
+	if err := cmd.CommandRun(command); err != nil {
 		return err
 	}
 

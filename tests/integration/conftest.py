@@ -167,6 +167,11 @@ def prepare_agent(agent, update_agent,server_id, mysql_version):
         agent.ssh(command="sudo bash -c \"grep -rli /etc/my.cnf -e 'server_id = 1' |  xargs -i@ sed -i 's/server_id = 1/server_id = {}/g' @\"".format(server_id))
         agent.ssh(command="sudo rm -rf /var/lib/mysql/auto.cnf")
         agent.ssh(command="sudo service mysql restart")
+        agent.ssh(command="mysql -BNe \"create user if not exists 'orchestrator-agent'@'%' identified WITH mysql_native_password by 'orchestrator-agent';\"")
+        agent.ssh(command="mysql -BNe \"GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, SHOW VIEW, CREATE TABLESPACE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, INDEX, INSERT, LOCK TABLES, PROCESS, REFERENCES, RELOAD, REPLICATION CLIENT, SELECT, SUPER, TRIGGER, UPDATE on *.* to 'orchestrator-agent'@'%';\"")
+        if mysql_version == "80":
+            agent.ssh(command="mysql -BNe \"GRANT BACKUP_ADMIN, CLONE_ADMIN, SYSTEM_USER on *.* to 'orchestrator-agent'@'%';\"")
+
     agent.ssh(command="sudo bash -c \"rm -rf /tmp/bkp && mkdir /tmp/bkp && chown -R mysql:mysql /tmp/bkp\"")
     print(agent.ssh(command="sudo yum install -y $(find /vagrant -name 'orchestrator-agent*.rpm')"))
     agent.ssh(command="sudo cp /vagrant/orchestrator-agent_{}.conf /etc/orchestrator-agent.conf && sudo chown mysql:mysql /etc/orchestrator-agent.conf".format(mysql_version))

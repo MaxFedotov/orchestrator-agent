@@ -74,23 +74,11 @@ func GetFSStatistics(path string, stat FSStat) (int64, error) {
 	return size, err
 }
 
-// MySQLRunning checks if mysql is running
-func MySQLRunning(execWithSudo bool) (bool, error) {
-	_, err := cmd.CommandOutput("systemctl check mysqld", execWithSudo)
-	if err != nil {
-		if _, ok := err.(*exec.ExitError); ok {
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to run systemctl: %v", err)
-	}
-	return true, nil
-}
-
 // GetDiskUsage returns disk usage for specified path
-func GetDiskUsage(path string, execWithSudo bool) (int64, error) {
+func GetDiskUsage(path string, cmd *cmd.CmdOpts) (int64, error) {
 	var result int64
 
-	output, err := cmd.CommandOutput(fmt.Sprintf("du -sb %s", path), execWithSudo)
+	output, err := cmd.CommandOutput(fmt.Sprintf("du -sb %s", path))
 	if err != nil {
 		return result, err
 	}
@@ -103,29 +91,41 @@ func GetDiskUsage(path string, execWithSudo bool) (int64, error) {
 }
 
 // MySQLErrorLogTail returns last 40 lines of MySQL error log
-func GetMySQLErrorLogTail(logFile string, execWithSudo bool) (string, error) {
-	output, err := cmd.CommandOutput(fmt.Sprintf("tail -n 40 %s", logFile), execWithSudo)
+func GetMySQLErrorLogTail(logFile string, cmd *cmd.CmdOpts) (string, error) {
+	output, err := cmd.CommandOutput(fmt.Sprintf("tail -n 40 %s", logFile))
 	if err != nil {
 		return "", err
 	}
 	return string(output), nil
 }
 
-func CheckPermissionsOnFolder(folder string, execWithSudo bool) error {
-	return cmd.CommandRun(fmt.Sprintf("touch %s -c", path.Join(folder, "orch-perm-test")), execWithSudo)
+func CheckPermissionsOnFolder(folder string, cmd *cmd.CmdOpts) error {
+	return cmd.CommandRun(fmt.Sprintf("touch %s -c", path.Join(folder, "orch-perm-test")))
 }
 
-func MySQLStop(execWithSudo bool) error {
-	return cmd.CommandRun("systemctl stop mysqld", execWithSudo)
+// MySQLRunning checks if mysql is running
+func MySQLRunning(command string, cmd *cmd.CmdOpts) (bool, error) {
+	_, err := cmd.CommandOutput(command)
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); ok {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to run systemctl: %v", err)
+	}
+	return true, nil
 }
 
-func MySQLStart(execWithSudo bool) error {
-	return cmd.CommandRun("systemctl start mysqld", execWithSudo)
+func MySQLStop(command string, cmd *cmd.CmdOpts) error {
+	return cmd.CommandRun(command)
+}
+
+func MySQLStart(command string, cmd *cmd.CmdOpts) error {
+	return cmd.CommandRun(command)
 }
 
 // GetOSName returns OS name
-func GetOSName(execWithSudo bool) (string, error) {
-	output, err := cmd.CommandOutput("hostnamectl | grep 'Operating System' | awk -F \":\" '{print $NF}'", execWithSudo)
+func GetOSName(cmd *cmd.CmdOpts) (string, error) {
+	output, err := cmd.CommandOutput("hostnamectl | grep 'Operating System' | awk -F \":\" '{print $NF}'")
 	if err != nil {
 		return "", err
 	}
@@ -133,8 +133,8 @@ func GetOSName(execWithSudo bool) (string, error) {
 }
 
 // GetMemoryTotal returns total availiable system memory
-func GetMemoryTotal(execWithSudo bool) (int64, error) {
-	output, err := cmd.CommandOutput("grep MemTotal /proc/meminfo | awk '{print $2}'", execWithSudo)
+func GetMemoryTotal(cmd *cmd.CmdOpts) (int64, error) {
+	output, err := cmd.CommandOutput("grep MemTotal /proc/meminfo | awk '{print $2}'")
 	if err != nil {
 		return 0, err
 	}

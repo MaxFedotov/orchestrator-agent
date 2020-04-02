@@ -9,6 +9,8 @@ Prerequisites:
 * [Virtualbox](https://www.virtualbox.org/wiki/Downloads)
 * [Pip](https://pypi.python.org/pypi/pip)
 * [Goreleaser](https://goreleaser.com/install/)
+* [fpm] (https://fpm.readthedocs.io/en/latest/installing.html)
+* rpm
 
 Tests use pytest framework and python bindings for vagrant in order to spawn vagrant VMs.  
 

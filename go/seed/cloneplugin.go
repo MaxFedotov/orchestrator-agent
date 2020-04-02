@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/github/orchestrator-agent/go/osagent"
 	"github.com/openark/golib/sqlutils"
@@ -97,8 +96,8 @@ func (sm *ClonePluginSeed) Backup(seedHost string, mysqlPort int) {
 		sm.Logger.WithField("error", err).Info("Backup failed")
 		return
 	}
-	cloneCmd := fmt.Sprintf("mysql --user=%s --password=%s --host=127.0.0.1 --port=%d -BNe \"CLONE INSTANCE FROM %s@%s:%d identified by '%s';\"", sm.User, sm.Password, sm.MySQLPort, sm.User, seedHost, mysqlPort, sm.Password)
-	err := cmd.CommandRunWithFunc(cloneCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	cloneCmd := fmt.Sprintf("mysql --user=%s --password=%s --host=127.0.0.1 --port=%d -BNe \"CLONE INSTANCE FROM '%s'@'%s':%d identified by '%s';\"", sm.User, sm.Password, sm.MySQLPort, sm.User, seedHost, mysqlPort, sm.Password)
+	err := sm.Cmd.CommandRunWithFunc(cloneCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
 	})
 	if err != nil {
@@ -111,7 +110,7 @@ func (sm *ClonePluginSeed) Backup(seedHost string, mysqlPort int) {
 }
 
 func (sm *ClonePluginSeed) isMySQLRunning() error {
-	running, err := osagent.MySQLRunning(sm.ExecWithSudo)
+	running, err := osagent.MySQLRunning(sm.MySQLServiceStatusCommand, sm.Cmd)
 	if running == false {
 		err = fmt.Errorf("MySQL not running")
 	}

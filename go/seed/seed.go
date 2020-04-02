@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	log "github.com/sirupsen/logrus"
 )
@@ -71,15 +72,19 @@ type Plugin interface {
 }
 
 type Base struct {
-	MySQLClient  *mysql.MySQLClient
-	MySQLPort    int
-	MySQLDatadir string
-	User         string
-	Password     string
-	ExecWithSudo bool
-	SeedPort     int
-	BackupDir    string
-	StatusChan   chan *SeedStageState
+	MySQLClient               *mysql.MySQLClient
+	Cmd                       *cmd.CmdOpts
+	MySQLPort                 int
+	MySQLDatadir              string
+	MySQLServiceStatusCommand string
+	MySQLServiceStartCommand  string
+	MySQLServiceStopCommand   string
+	User                      string
+	Password                  string
+	ExecWithSudo              bool
+	SeedPort                  int
+	BackupDir                 string
+	StatusChan                chan *SeedStageState
 }
 
 type MethodOpts struct {

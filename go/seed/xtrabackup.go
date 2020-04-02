@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/github/orchestrator-agent/go/osagent"
 	log "github.com/sirupsen/logrus"
@@ -54,13 +53,13 @@ func (sm *XtrabackupSeed) Prepare(side Side) {
 	if side == Target {
 		var wg sync.WaitGroup
 		stage.UpdateSeedStatus(Running, nil, "Stopping MySQL", sm.StatusChan)
-		if err := osagent.MySQLStop(sm.ExecWithSudo); err != nil {
+		if err := osagent.MySQLStop(sm.MySQLServiceStopCommand, sm.Cmd); err != nil {
 			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 			sm.Logger.WithField("error", err).Info("Prepare failed")
 			return
 		}
 		cleanupDatadirCmd := fmt.Sprintf("find %s -mindepth 1 -regex ^.*$ -delete", sm.MySQLDatadir)
-		err := cmd.CommandRunWithFunc(cleanupDatadirCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		err := sm.Cmd.CommandRunWithFunc(cleanupDatadirCmd, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Cleaning MySQL datadir", sm.StatusChan)
 		})
 		if err != nil {
@@ -81,7 +80,7 @@ func (sm *XtrabackupSeed) Prepare(side Side) {
 				}
 			}
 			recieveCmd := fmt.Sprintf("socat -u %s EXEC:\"xbstream -x - -C %s\"", socatConOpts, sm.MySQLDatadir)
-			err := cmd.CommandRunWithFunc(recieveCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+			err := sm.Cmd.CommandRunWithFunc(recieveCmd, func(cmd *pipe.State) {
 				stage.UpdateSeedStatus(Running, cmd, fmt.Sprintf("Started socat on port %d. Waiting for backup data", sm.SeedPort), sm.StatusChan)
 				wg.Done()
 			})
@@ -120,9 +119,9 @@ func (sm *XtrabackupSeed) Backup(seedHost string, mysqlPort int) {
 			socatConOpts += ",verify=0"
 		}
 	}
-	backupCmd := fmt.Sprintf("socat EXEC:\"xtrabackup --backup --user=%s --password=%s --port=%d --host=127.0.0.1 --stream=xbstream %s\" %s", sm.User, sm.Password, mysqlPort, strings.Join(addtionalOpts, " "), socatConOpts)
+	backupCmd := fmt.Sprintf("socat EXEC:\"xtrabackup --backup --target-dir=./ --user=%s --password=%s --port=%d --host=127.0.0.1 --stream=xbstream %s\" %s", sm.User, sm.Password, mysqlPort, strings.Join(addtionalOpts, " "), socatConOpts)
 	sm.Logger.Info("Starting backup")
-	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err := sm.Cmd.CommandRunWithFunc(backupCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
 	})
 	if err != nil {
@@ -154,7 +153,7 @@ func (sm *XtrabackupSeed) Restore() {
 	}
 	if decompress {
 		decompressCmd := fmt.Sprintf("xtrabackup --decompress --parallel=%d --target-dir=%s", parallel, sm.MySQLDatadir)
-		err := cmd.CommandRunWithFunc(decompressCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		err := sm.Cmd.CommandRunWithFunc(decompressCmd, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Decompressing backup", sm.StatusChan)
 		})
 		if err != nil {
@@ -163,7 +162,7 @@ func (sm *XtrabackupSeed) Restore() {
 			return
 		}
 		removeCompressedFilesCmd := fmt.Sprintf("find %s -type f -regex ^.*.qp$ -delete", sm.MySQLDatadir)
-		err = cmd.CommandRunWithFunc(removeCompressedFilesCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		err = sm.Cmd.CommandRunWithFunc(removeCompressedFilesCmd, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Removing compressed backup files", sm.StatusChan)
 		})
 		if err != nil {
@@ -174,7 +173,7 @@ func (sm *XtrabackupSeed) Restore() {
 	}
 	// we need this in order to prevent possible xtrabackup error "Log file ./ib_logfile1 is of different size than other log files bytes!"
 	removeLogFilesCmd := fmt.Sprintf("find %s -type f -regex ^.*ib_logfile[0-9]$ -delete", sm.MySQLDatadir)
-	err = cmd.CommandRunWithFunc(removeLogFilesCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err = sm.Cmd.CommandRunWithFunc(removeLogFilesCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Removing ib_logfile files", sm.StatusChan)
 	})
 	if err != nil {
@@ -183,7 +182,7 @@ func (sm *XtrabackupSeed) Restore() {
 		return
 	}
 	prepareCmd := fmt.Sprintf("xtrabackup --prepare --target-dir=%s", sm.MySQLDatadir)
-	err = cmd.CommandRunWithFunc(prepareCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err = sm.Cmd.CommandRunWithFunc(prepareCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running xtrabackup prepare", sm.StatusChan)
 	})
 	if err != nil {
@@ -192,7 +191,7 @@ func (sm *XtrabackupSeed) Restore() {
 		return
 	}
 	// remove ib_logfile created by xtrabackup
-	err = cmd.CommandRunWithFunc(removeLogFilesCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err = sm.Cmd.CommandRunWithFunc(removeLogFilesCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Removing ib_logfile files", sm.StatusChan)
 	})
 	if err != nil {
@@ -202,7 +201,7 @@ func (sm *XtrabackupSeed) Restore() {
 	}
 	// change owner of mysql datadir files to mysql:mysql
 	chownCmd := fmt.Sprintf("chown -R mysql:mysql %s", sm.MySQLDatadir)
-	err = cmd.CommandRunWithFunc(chownCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err = sm.Cmd.CommandRunWithFunc(chownCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Changing owner of mysql datadir", sm.StatusChan)
 	})
 	if err != nil {
@@ -210,7 +209,7 @@ func (sm *XtrabackupSeed) Restore() {
 		sm.Logger.WithField("error", err).Info("Restore failed")
 		return
 	}
-	if err := osagent.MySQLStart(sm.ExecWithSudo); err != nil {
+	if err := osagent.MySQLStart(sm.MySQLServiceStartCommand, sm.Cmd); err != nil {
 		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 		sm.Logger.WithField("error", err).Info("Restore failed")
 	}
@@ -220,12 +219,12 @@ func (sm *XtrabackupSeed) Restore() {
 
 func (sm *XtrabackupSeed) GetMetadata() (*SeedMetadata, error) {
 	meta := &SeedMetadata{}
-	output, err := cmd.CommandOutput(fmt.Sprintf("cat %s", path.Join(sm.MySQLDatadir, sm.MetadataFileName)), sm.ExecWithSudo)
+	output, err := sm.Cmd.CommandOutput(fmt.Sprintf("cat %s", path.Join(sm.MySQLDatadir, sm.MetadataFileName)))
 	if err != nil {
 		sm.Logger.WithField("error", err).Info("Unable to read seed metadata")
 		return meta, err
 	}
-	tokens := cmd.OutputTokens(`[ \t]+`, output)
+	tokens := sm.Cmd.OutputTokens(`[ \t]+`, output)
 	if len(tokens[0][0]) > 0 {
 		for _, lineTokens := range tokens {
 			meta.LogFile = lineTokens[0]
@@ -250,7 +249,7 @@ func (sm *XtrabackupSeed) Cleanup(side Side) {
 }
 
 func (sm *XtrabackupSeed) isAvailable() bool {
-	err := cmd.CommandRun("xtrabackup --version", sm.ExecWithSudo)
+	err := sm.Cmd.CommandRun("xtrabackup --version")
 	if err != nil {
 		return false
 	}
@@ -258,7 +257,7 @@ func (sm *XtrabackupSeed) isAvailable() bool {
 }
 
 func (sm *XtrabackupSeed) getSupportedEngines() []mysql.Engine {
-	output, _ := cmd.CommandCombinedOutput("xtrabackup --version", sm.ExecWithSudo)
+	output, _ := sm.Cmd.CommandCombinedOutput("xtrabackup --version")
 	xtrabackupVersionString := string(output)
 	re := regexp.MustCompile(`version\s*(\d+)`)
 	res := re.FindStringSubmatch(xtrabackupVersionString)[1]

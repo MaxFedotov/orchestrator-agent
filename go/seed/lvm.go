@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/helper/mysql"
 	"github.com/github/orchestrator-agent/go/osagent"
 	log "github.com/sirupsen/logrus"
@@ -44,13 +43,13 @@ func (sm *LVMSeed) Prepare(side Side) {
 		var latestSnapshotTime time.Time
 		var latestLV *osagent.LogicalVolume
 		if sm.Config.CreateNewSnapshotForSeed {
-			if err := osagent.CreateSnapshot(sm.Config.CreateSnapshotCommand, sm.ExecWithSudo); err != nil {
+			if err := osagent.CreateSnapshot(sm.Config.CreateSnapshotCommand, sm.Cmd); err != nil {
 				stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 				sm.Logger.WithField("error", err).Info("Failed to create snapshot")
 				return
 			}
 		}
-		logicalVolumes, err := osagent.GetLogicalVolumes("", sm.Config.SnapshotVolumesFilter, sm.ExecWithSudo)
+		logicalVolumes, err := osagent.GetLogicalVolumes("", sm.Config.SnapshotVolumesFilter, sm.Cmd)
 		if err != nil {
 			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 			sm.Logger.WithField("error", err).Info("Failed to get logical volumes info")
@@ -64,7 +63,7 @@ func (sm *LVMSeed) Prepare(side Side) {
 				}
 			}
 		}
-		if _, err := osagent.MountLV(sm.BackupDir, latestLV.Path, sm.ExecWithSudo); err != nil {
+		if _, err := osagent.MountLV(sm.BackupDir, latestLV.Path, sm.Cmd); err != nil {
 			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 			sm.Logger.WithField("error", err).Info("Failed to mount snapshot")
 			return
@@ -73,13 +72,13 @@ func (sm *LVMSeed) Prepare(side Side) {
 	if side == Target {
 		var wg sync.WaitGroup
 		stage.UpdateSeedStatus(Running, nil, "Stopping MySQL", sm.StatusChan)
-		if err := osagent.MySQLStop(sm.ExecWithSudo); err != nil {
+		if err := osagent.MySQLStop(sm.MySQLServiceStopCommand, sm.Cmd); err != nil {
 			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 			sm.Logger.WithField("error", err).Info("Prepare failed")
 			return
 		}
 		cleanupDatadirCmd := fmt.Sprintf("find %s -mindepth 1 -regex ^.*$ -delete", sm.MySQLDatadir)
-		err := cmd.CommandRunWithFunc(cleanupDatadirCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+		err := sm.Cmd.CommandRunWithFunc(cleanupDatadirCmd, func(cmd *pipe.State) {
 			stage.UpdateSeedStatus(Running, cmd, "Cleaning MySQL datadir", sm.StatusChan)
 		})
 		if err != nil {
@@ -100,7 +99,7 @@ func (sm *LVMSeed) Prepare(side Side) {
 				}
 			}
 			recieveCmd := fmt.Sprintf("socat -u %s EXEC:\"tar xzf - -C %s\"", socatConOpts, sm.MySQLDatadir)
-			err := cmd.CommandRunWithFunc(recieveCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+			err := sm.Cmd.CommandRunWithFunc(recieveCmd, func(cmd *pipe.State) {
 				stage.UpdateSeedStatus(Running, cmd, fmt.Sprintf("Started socat on port %d. Waiting for backup data", sm.SeedPort), sm.StatusChan)
 				wg.Done()
 			})
@@ -133,7 +132,7 @@ func (sm *LVMSeed) Backup(seedHost string, mysqlPort int) {
 	}
 	backupCmd := fmt.Sprintf("socat EXEC:\"tar czf - -C %s .\" %s", sm.BackupDir, socatConOpts)
 	sm.Logger.Info("Starting backup")
-	err := cmd.CommandRunWithFunc(backupCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err := sm.Cmd.CommandRunWithFunc(backupCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Running backup", sm.StatusChan)
 	})
 	if err != nil {
@@ -148,7 +147,7 @@ func (sm *LVMSeed) Backup(seedHost string, mysqlPort int) {
 func (sm *LVMSeed) Restore() {
 	stage := NewSeedStage(Restore, sm.StatusChan)
 	cleanupDatadirCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.MySQLDatadir, "auto.cnf"))
-	err := cmd.CommandRunWithFunc(cleanupDatadirCmd, sm.ExecWithSudo, func(cmd *pipe.State) {
+	err := sm.Cmd.CommandRunWithFunc(cleanupDatadirCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Removing auto.cnf from MySQL datadir", sm.StatusChan)
 	})
 	if err != nil {
@@ -156,7 +155,17 @@ func (sm *LVMSeed) Restore() {
 		sm.Logger.WithField("error", err).Info("Restore failed")
 		return
 	}
-	if err := osagent.MySQLStart(sm.ExecWithSudo); err != nil {
+	// change owner of mysql datadir files to mysql:mysql
+	chownCmd := fmt.Sprintf("chown -R mysql:mysql %s", sm.MySQLDatadir)
+	err = sm.Cmd.CommandRunWithFunc(chownCmd, func(cmd *pipe.State) {
+		stage.UpdateSeedStatus(Running, cmd, "Changing owner of mysql datadir", sm.StatusChan)
+	})
+	if err != nil {
+		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+		sm.Logger.WithField("error", err).Info("Restore failed")
+		return
+	}
+	if err := osagent.MySQLStart(sm.MySQLServiceStartCommand, sm.Cmd); err != nil {
 		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 		sm.Logger.WithField("error", err).Info("Restore failed")
 	}
@@ -166,12 +175,12 @@ func (sm *LVMSeed) Restore() {
 
 func (sm *LVMSeed) GetMetadata() (*SeedMetadata, error) {
 	meta := &SeedMetadata{}
-	output, err := cmd.CommandOutput(fmt.Sprintf("cat %s", path.Join(sm.MySQLDatadir, sm.MetadataFileName)), sm.ExecWithSudo)
+	output, err := sm.Cmd.CommandOutput(fmt.Sprintf("cat %s", path.Join(sm.MySQLDatadir, sm.MetadataFileName)))
 	if err != nil {
 		sm.Logger.WithField("error", err).Info("Unable to read seed metadata")
 		return meta, err
 	}
-	lines := cmd.OutputLines(output)
+	lines := sm.Cmd.OutputLines(output)
 	for _, line := range lines {
 		if strings.Contains(line, "File:") {
 			meta.LogFile = strings.Trim(strings.Split(line, ":")[1], " ")
@@ -195,7 +204,7 @@ func (sm *LVMSeed) Cleanup(side Side) {
 	stage := NewSeedStage(Cleanup, sm.StatusChan)
 	sm.Logger.Info("Starting cleanup")
 	if side == Source {
-		if err := osagent.Unmount(sm.BackupDir, sm.ExecWithSudo); err != nil {
+		if err := osagent.Unmount(sm.BackupDir, sm.Cmd); err != nil {
 			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 			sm.Logger.WithField("error", err).Info("Cleanup failed")
 			return
@@ -207,7 +216,7 @@ func (sm *LVMSeed) Cleanup(side Side) {
 }
 
 func (sm *LVMSeed) isAvailable() bool {
-	err := cmd.CommandRun("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent,time --sort -time", sm.ExecWithSudo)
+	err := sm.Cmd.CommandRun("lvs --noheading -o lv_name,vg_name,lv_path,snap_percent,time --sort -time")
 	if err != nil {
 		return false
 	}
