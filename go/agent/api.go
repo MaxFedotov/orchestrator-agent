@@ -641,8 +641,8 @@ func (this *HttpAPI) AbortSeedStage(params martini.Params, r render.Render, req 
 	agent.Lock()
 	defer agent.Unlock()
 	if agent.ActiveSeed.StagesDetails[seedStage].Status == seed.Running || agent.ActiveSeed.StagesDetails[seedStage].Command == nil {
-		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Unable to abort seed. Seed not running")
-		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seed. Seed not running"})
+		agent.Logger.WithFields(log.Fields{"seedID": params["seedID"], "seedStage": params["seedStage"]}).Error("Unable to abort seed. Either seed is completed or seed commands are not running")
+		r.JSON(500, &APIResponse{Code: ERROR, Message: "Unable to abort seed. Either seed is completed or seed commands are not running"})
 		return
 	}
 	agent.ActiveSeed.StagesDetails[seedStage].Command.Kill()

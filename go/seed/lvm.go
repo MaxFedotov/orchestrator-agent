@@ -86,6 +86,15 @@ func (sm *LVMSeed) Prepare(side Side) {
 			sm.Logger.WithField("error", err).Info("Prepare failed")
 			return
 		}
+		createLockFileCmd := fmt.Sprintf("touch %s/orchestrator-agent.lock", sm.MySQLDatadir)
+		err = sm.Cmd.CommandRunWithFunc(createLockFileCmd, func(cmd *pipe.State) {
+			stage.UpdateSeedStatus(Running, cmd, "Creating lock file", sm.StatusChan)
+		})
+		if err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
 		wg.Add(1)
 		go func(wg *sync.WaitGroup) {
 			socatConOpts := fmt.Sprintf("TCP-LISTEN:%d,reuseaddr", sm.SeedPort)
@@ -207,6 +216,17 @@ func (sm *LVMSeed) Cleanup(side Side) {
 		if err := osagent.Unmount(sm.BackupDir, sm.Cmd); err != nil {
 			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
 			sm.Logger.WithField("error", err).Info("Cleanup failed")
+			return
+		}
+	}
+	if side == Target {
+		removeLockFileCmd := fmt.Sprintf("rm -rf %s/orchestrator-agent.lock", sm.MySQLDatadir)
+		err := sm.Cmd.CommandRunWithFunc(removeLockFileCmd, func(cmd *pipe.State) {
+			stage.UpdateSeedStatus(Running, cmd, "Creating lock file", sm.StatusChan)
+		})
+		if err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
 			return
 		}
 	}

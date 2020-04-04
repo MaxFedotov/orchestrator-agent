@@ -67,6 +67,15 @@ func (sm *XtrabackupSeed) Prepare(side Side) {
 			sm.Logger.WithField("error", err).Info("Prepare failed")
 			return
 		}
+		createLockFileCmd := fmt.Sprintf("touch %s/orchestrator-agent.lock", sm.MySQLDatadir)
+		err = sm.Cmd.CommandRunWithFunc(createLockFileCmd, func(cmd *pipe.State) {
+			stage.UpdateSeedStatus(Running, cmd, "Creating lock file", sm.StatusChan)
+		})
+		if err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
 		wg.Add(1)
 		go func(wg *sync.WaitGroup) {
 			socatConOpts := fmt.Sprintf("TCP-LISTEN:%d,reuseaddr", sm.SeedPort)
@@ -244,6 +253,17 @@ func (sm *XtrabackupSeed) GetMetadata() (*SeedMetadata, error) {
 func (sm *XtrabackupSeed) Cleanup(side Side) {
 	stage := NewSeedStage(Cleanup, sm.StatusChan)
 	sm.Logger.Info("Starting cleanup")
+	if side == Target {
+		removeLockFileCmd := fmt.Sprintf("rm -rf %s/orchestrator-agent.lock", sm.MySQLDatadir)
+		err := sm.Cmd.CommandRunWithFunc(removeLockFileCmd, func(cmd *pipe.State) {
+			stage.UpdateSeedStatus(Running, cmd, "Creating lock file", sm.StatusChan)
+		})
+		if err != nil {
+			stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
+			sm.Logger.WithField("error", err).Info("Prepare failed")
+			return
+		}
+	}
 	sm.Logger.Info("Cleanup completed")
 	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
 }
