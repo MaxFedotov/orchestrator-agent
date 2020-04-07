@@ -48,7 +48,7 @@ type XtrabackupConfig struct {
 }
 
 func (sm *XtrabackupSeed) Prepare(side Side) {
-	stage := NewSeedStage(Prepare, sm.StatusChan)
+	stage := NewSeedStage(Prepare, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting prepare")
 	if side == Target {
 		var wg sync.WaitGroup
@@ -109,7 +109,7 @@ func (sm *XtrabackupSeed) Prepare(side Side) {
 }
 
 func (sm *XtrabackupSeed) Backup(seedHost string, mysqlPort int) {
-	stage := NewSeedStage(Backup, sm.StatusChan)
+	stage := NewSeedStage(Backup, sm.StatusChan, sm.Hostname)
 	var addtionalOpts []string
 	for _, opt := range sm.Config.XtrabackupAdditionalOpts {
 		if defaultXtrabackupOpts[strings.Split(opt, "=")[0]] {
@@ -143,7 +143,7 @@ func (sm *XtrabackupSeed) Backup(seedHost string, mysqlPort int) {
 }
 
 func (sm *XtrabackupSeed) Restore() {
-	stage := NewSeedStage(Restore, sm.StatusChan)
+	stage := NewSeedStage(Restore, sm.StatusChan, sm.Hostname)
 	var decompress bool
 	var parallel = 1
 	var err error
@@ -251,7 +251,7 @@ func (sm *XtrabackupSeed) GetMetadata() (*SeedMetadata, error) {
 }
 
 func (sm *XtrabackupSeed) Cleanup(side Side) {
-	stage := NewSeedStage(Cleanup, sm.StatusChan)
+	stage := NewSeedStage(Cleanup, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting cleanup")
 	if side == Target {
 		removeLockFileCmd := fmt.Sprintf("rm -rf %s/orchestrator-agent.lock", sm.MySQLDatadir)

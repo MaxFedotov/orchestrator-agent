@@ -2,7 +2,6 @@ package seed
 
 import (
 	"bytes"
-	"os"
 	"time"
 
 	"gopkg.in/pipe.v2"
@@ -67,13 +66,13 @@ type SeedStageState struct {
 	Command   *pipe.State `json:"-"`
 }
 
-func NewSeedStage(stage Stage, statusChan chan *SeedStageState) *SeedStageState {
+func NewSeedStage(stage Stage, statusChan chan *SeedStageState, hostname string) *SeedStageState {
 	seedStageState := &SeedStageState{
 		Stage:     stage,
 		Timestamp: time.Now(),
 		Status:    Running,
+		Hostname:  hostname,
 	}
-	seedStageState.Hostname, _ = os.Hostname()
 	statusChan <- seedStageState
 	return seedStageState
 }

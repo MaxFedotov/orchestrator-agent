@@ -84,6 +84,7 @@ type Base struct {
 	ExecWithSudo              bool
 	SeedPort                  int
 	BackupDir                 string
+	Hostname                  string
 	StatusChan                chan *SeedStageState
 }
 

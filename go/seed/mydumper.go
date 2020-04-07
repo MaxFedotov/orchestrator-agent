@@ -45,7 +45,7 @@ type MydumperConfig struct {
 }
 
 func (sm *MydumperSeed) Prepare(side Side) {
-	stage := NewSeedStage(Prepare, sm.StatusChan)
+	stage := NewSeedStage(Prepare, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting prepare")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFolderName))
@@ -63,7 +63,7 @@ func (sm *MydumperSeed) Prepare(side Side) {
 }
 
 func (sm *MydumperSeed) Backup(seedHost string, mysqlPort int) {
-	stage := NewSeedStage(Backup, sm.StatusChan)
+	stage := NewSeedStage(Backup, sm.StatusChan, sm.Hostname)
 	var addtionalOpts []string
 	for _, opt := range sm.Config.MydumperAdditionalOpts {
 		if defaultMydumperOpts[strings.Split(opt, " ")[0]] {
@@ -88,7 +88,7 @@ func (sm *MydumperSeed) Backup(seedHost string, mysqlPort int) {
 }
 
 func (sm *MydumperSeed) Restore() {
-	stage := NewSeedStage(Restore, sm.StatusChan)
+	stage := NewSeedStage(Restore, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting restore")
 	var addtionalOpts []string
 	for _, opt := range sm.Config.MyloaderAdditionalOpts {
@@ -160,7 +160,7 @@ func (sm *MydumperSeed) GetMetadata() (*SeedMetadata, error) {
 }
 
 func (sm *MydumperSeed) Cleanup(side Side) {
-	stage := NewSeedStage(Cleanup, sm.StatusChan)
+	stage := NewSeedStage(Cleanup, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting cleanup")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFolderName))

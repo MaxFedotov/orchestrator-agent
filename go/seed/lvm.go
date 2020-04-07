@@ -37,7 +37,7 @@ type LVMConfig struct {
 }
 
 func (sm *LVMSeed) Prepare(side Side) {
-	stage := NewSeedStage(Prepare, sm.StatusChan)
+	stage := NewSeedStage(Prepare, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting prepare")
 	if side == Source {
 		var latestSnapshotTime time.Time
@@ -128,7 +128,7 @@ func (sm *LVMSeed) Prepare(side Side) {
 }
 
 func (sm *LVMSeed) Backup(seedHost string, mysqlPort int) {
-	stage := NewSeedStage(Backup, sm.StatusChan)
+	stage := NewSeedStage(Backup, sm.StatusChan, sm.Hostname)
 	socatConOpts := fmt.Sprintf("TCP:%s:%d", seedHost, sm.SeedPort)
 	if sm.Config.SocatUseSSL {
 		socatConOpts = fmt.Sprintf("openssl-connect:%s:%d,cert=%s", seedHost, sm.SeedPort, sm.Config.SocatSSLCertFile)
@@ -154,7 +154,7 @@ func (sm *LVMSeed) Backup(seedHost string, mysqlPort int) {
 }
 
 func (sm *LVMSeed) Restore() {
-	stage := NewSeedStage(Restore, sm.StatusChan)
+	stage := NewSeedStage(Restore, sm.StatusChan, sm.Hostname)
 	cleanupDatadirCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.MySQLDatadir, "auto.cnf"))
 	err := sm.Cmd.CommandRunWithFunc(cleanupDatadirCmd, func(cmd *pipe.State) {
 		stage.UpdateSeedStatus(Running, cmd, "Removing auto.cnf from MySQL datadir", sm.StatusChan)
@@ -210,7 +210,7 @@ func (sm *LVMSeed) GetMetadata() (*SeedMetadata, error) {
 }
 
 func (sm *LVMSeed) Cleanup(side Side) {
-	stage := NewSeedStage(Cleanup, sm.StatusChan)
+	stage := NewSeedStage(Cleanup, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting cleanup")
 	if side == Source {
 		if err := osagent.Unmount(sm.BackupDir, sm.Cmd); err != nil {

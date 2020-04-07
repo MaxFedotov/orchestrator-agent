@@ -198,7 +198,9 @@ func (agent *Agent) Start() error {
 	agent.Lock()
 	defer agent.Unlock()
 
-	hostname, err := os.Hostname()
+	agent.Cmd = cmd.NewCmd(agent.Config.Common.ExecWithSudo, agent.Config.Common.SudoUser, log.WithFields(log.Fields{"prefix": "CMD"}))
+
+	hostname, err := osagent.GetHostname(agent.Cmd)
 	if err != nil {
 		return fmt.Errorf("Unable to get hostname: %+v", err)
 	}
@@ -218,7 +220,6 @@ func (agent *Agent) Start() error {
 			agent.Logger.WithField("error", err).Error("Unable to create token hint file")
 		}
 	}
-	agent.Cmd = cmd.NewCmd(agent.Config.Common.ExecWithSudo, agent.Config.Common.SudoUser, log.WithFields(log.Fields{"prefix": "CMD"}))
 	agent.HTTPClient = http.InitHTTPClient(agent.Config.Common.HTTPTimeout, agent.Config.Common.SSLSkipVerify, agent.Config.Common.SSLCAFile, agent.Config.Common.UseMutualTLS, agent.Config.Common.SSLCertFile, agent.Config.Common.SSLPrivateKeyFile, agent.Logger)
 
 	agent.MySQLClient, err = dbagent.NewMySQLClient(agent.Config.Mysql.User, agent.Config.Mysql.Password, agent.Config.Mysql.Port)
@@ -245,6 +246,7 @@ func (agent *Agent) Start() error {
 		MySQLServiceStartCommand:  agent.Config.Mysql.ServiceStartCommand,
 		MySQLServiceStopCommand:   agent.Config.Mysql.ServiceStopCommand,
 		User:                      agent.Config.Mysql.User,
+		Hostname:                  agent.Info.Hostname,
 		Password:                  agent.Config.Mysql.Password,
 		ExecWithSudo:              agent.Config.Common.ExecWithSudo,
 		SeedPort:                  agent.Config.Common.SeedPort,

@@ -68,7 +68,7 @@ func main() {
 		defaultLogger.WithField("error", err).Fatal("Unable to start orchestrator-agent")
 	}
 
-	defaultLogger.WithField("version", version).Info("Starting orchestrator-agent")
+	defaultLogger.WithFields(log.Fields{"version": version, "git commit": commit, "date": date}).Info("Starting orchestrator-agent")
 
 	if err := app.Start(); err != nil {
 		defaultLogger.WithField("error", err).Fatal("Unable to initialize orchestrator-agent")

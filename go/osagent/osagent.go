@@ -144,3 +144,13 @@ func GetMemoryTotal(cmd *cmd.CmdOpts) (int64, error) {
 	}
 	return mem * 1024, err
 }
+
+// GetHostname returns agent hostname. We need this because go function os.Hostname() just reads /proc/sys/kernel/hostname and can return hostname without domain name
+func GetHostname(cmd *cmd.CmdOpts) (string, error) {
+	output, err := cmd.CommandOutput("hostname -f")
+	if err != nil {
+		hostname, err := os.Hostname()
+		return hostname, err
+	}
+	return strings.TrimSpace(string(output)), err
+}

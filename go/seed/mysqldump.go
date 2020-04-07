@@ -40,7 +40,7 @@ type MysqldumpConfig struct {
 }
 
 func (sm *MysqldumpSeed) Prepare(side Side) {
-	stage := NewSeedStage(Prepare, sm.StatusChan)
+	stage := NewSeedStage(Prepare, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting prepare")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFileName))
@@ -58,7 +58,7 @@ func (sm *MysqldumpSeed) Prepare(side Side) {
 }
 
 func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
-	stage := NewSeedStage(Backup, sm.StatusChan)
+	stage := NewSeedStage(Backup, sm.StatusChan, sm.Hostname)
 	var addtionalOpts []string
 	for _, opt := range sm.Config.MysqldumpAdditionalOpts {
 		if defaultMysqldumpOpts[strings.Split(opt, "=")[0]] {
@@ -83,7 +83,7 @@ func (sm *MysqldumpSeed) Backup(seedHost string, mysqlPort int) {
 }
 
 func (sm *MysqldumpSeed) Restore() {
-	stage := NewSeedStage(Restore, sm.StatusChan)
+	stage := NewSeedStage(Restore, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting restore")
 	if err := mysql.Exec(sm.MySQLClient.Conn, "RESET MASTER;"); err != nil {
 		stage.UpdateSeedStatus(Error, nil, err.Error(), sm.StatusChan)
@@ -130,7 +130,7 @@ func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
 }
 
 func (sm *MysqldumpSeed) Cleanup(side Side) {
-	stage := NewSeedStage(Cleanup, sm.StatusChan)
+	stage := NewSeedStage(Cleanup, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting cleanup")
 	if side == Target {
 		cleanupCmd := fmt.Sprintf("rm -rf %s", path.Join(sm.BackupDir, sm.BackupFileName))

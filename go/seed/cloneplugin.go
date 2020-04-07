@@ -34,7 +34,7 @@ type ClonePluginConfig struct {
 }
 
 func (sm *ClonePluginSeed) Prepare(side Side) {
-	stage := NewSeedStage(Prepare, sm.StatusChan)
+	stage := NewSeedStage(Prepare, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting prepare")
 	if side == Target {
 		if err := mysql.Exec(sm.MySQLClient.Conn, fmt.Sprintf("SET GLOBAL clone_autotune_concurrency=%t", sm.Config.CloneAutotuneConcurrency)); err != nil {
@@ -88,7 +88,7 @@ func (sm *ClonePluginSeed) Prepare(side Side) {
 }
 
 func (sm *ClonePluginSeed) Backup(seedHost string, mysqlPort int) {
-	stage := NewSeedStage(Backup, sm.StatusChan)
+	stage := NewSeedStage(Backup, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting backup")
 	donorListCmd := fmt.Sprintf("SET GLOBAL clone_valid_donor_list ='%s:%d'", seedHost, mysqlPort)
 	if err := mysql.Exec(sm.MySQLClient.Conn, donorListCmd); err != nil {
@@ -118,7 +118,7 @@ func (sm *ClonePluginSeed) isMySQLRunning() error {
 }
 
 func (sm *ClonePluginSeed) Restore() {
-	stage := NewSeedStage(Restore, sm.StatusChan)
+	stage := NewSeedStage(Restore, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting restore")
 	b := backoff.NewExponentialBackOff()
 	b.MaxElapsedTime = 15 * time.Minute
@@ -152,7 +152,7 @@ func (sm *ClonePluginSeed) GetMetadata() (*SeedMetadata, error) {
 }
 
 func (sm *ClonePluginSeed) Cleanup(side Side) {
-	stage := NewSeedStage(Cleanup, sm.StatusChan)
+	stage := NewSeedStage(Cleanup, sm.StatusChan, sm.Hostname)
 	sm.Logger.Info("Starting cleanup")
 	sm.Logger.Info("Cleanup completed")
 	stage.UpdateSeedStatus(Completed, nil, "Stage completed", sm.StatusChan)
