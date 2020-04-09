@@ -23,6 +23,13 @@ It is a service that runs on MySQL hosts and communicates with *orchestrator*.
 - Mounting/umounting of LVM snapshots
 - Detection of DC-local and DC-agnostic snapshots available for a given cluster
 
+##### Supported seed methods
+- Mysqldump
+- Mydumper
+- Xtrabackup
+- LVM
+- Clone plugin
+
 ### The orchestrator & orchestrator-agent architecture
 
 **orchestrator** is a standalone, centralized service/command line tool. When acting as a service, it provides with web API
