@@ -28,7 +28,6 @@ type LVMConfig struct {
 	AvailableLocalSnapshotHostsCommand string `toml:"available-local-snapshot-hosts-command"`
 	AvailableSnapshotHostsCommand      string `toml:"available-snapshot-hosts-command"`
 	SnapshotVolumesFilter              string `toml:"snapshot-volumes-filter"`
-	SnapshotMountPoint                 string `toml:"snapshot-mount-point"`
 	CreateNewSnapshotForSeed           bool   `toml:"create-new-snapshot-for-seed"`
 	SocatUseSSL                        bool   `toml:"socat-use-ssl"`
 	SocatSSLCertFile                   string `toml:"socat-ssl-cert-file"`
