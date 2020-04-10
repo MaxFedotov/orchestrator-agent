@@ -233,18 +233,22 @@ func (sm *XtrabackupSeed) GetMetadata() (*SeedMetadata, error) {
 		sm.Logger.WithField("error", err).Info("Unable to read seed metadata")
 		return meta, err
 	}
-	tokens := sm.Cmd.OutputTokens(`[ \t]+`, output)
-	if len(tokens[0][0]) > 0 {
-		for _, lineTokens := range tokens {
-			meta.LogFile = lineTokens[0]
-			meta.LogPos, err = strconv.ParseInt(strings.Trim(lineTokens[1], "\n"), 10, 64)
+	lines := sm.Cmd.OutputLines(output)
+	for idx, line := range lines {
+		if idx == 0 {
+			tokens := strings.Split(line, "\t")
+			meta.LogFile = tokens[0]
+			meta.LogPos, err = strconv.ParseInt(strings.Trim(tokens[1], "\n"), 10, 64)
 			if err != nil {
 				sm.Logger.WithField("error", err).Info("Unable to parse seed metadata")
 				return meta, err
 			}
-			if len(lineTokens) > 2 {
-				meta.GtidExecuted = strings.Trim(lineTokens[2], "\n")
+			if len(tokens) > 2 {
+				meta.GtidExecuted = strings.Trim(tokens[2], "\n")
 			}
+
+		} else {
+			meta.GtidExecuted += strings.Trim(line, "\n")
 		}
 	}
 	return meta, err

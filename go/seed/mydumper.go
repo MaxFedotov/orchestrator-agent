@@ -133,6 +133,7 @@ func (sm *MydumperSeed) Restore() {
 }
 
 func (sm *MydumperSeed) GetMetadata() (*SeedMetadata, error) {
+	var isGtidSection bool
 	meta := &SeedMetadata{}
 	output, err := sm.Cmd.CommandOutput(fmt.Sprintf("cat %s", path.Join(sm.BackupDir, sm.BackupFolderName, sm.MetadataFileName)))
 	if err != nil {
@@ -153,7 +154,18 @@ func (sm *MydumperSeed) GetMetadata() (*SeedMetadata, error) {
 		}
 		if strings.Contains(line, "GTID:") {
 			meta.GtidExecuted = strings.Trim(strings.SplitAfterN(line, ":", 2)[1], " ")
-			break
+			if strings.HasSuffix(line, ",") {
+				isGtidSection = true
+				continue
+			} else {
+				break
+			}
+		}
+		if isGtidSection {
+			meta.GtidExecuted += line
+			if !strings.HasSuffix(line, ",") {
+				break
+			}
 		}
 	}
 	return meta, err

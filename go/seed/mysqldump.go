@@ -104,6 +104,7 @@ func (sm *MysqldumpSeed) Restore() {
 }
 
 func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
+	var isGtidSection bool
 	meta := &SeedMetadata{}
 	output, err := sm.Cmd.CommandOutput(fmt.Sprintf("head -n 100 %s", path.Join(sm.BackupDir, sm.BackupFileName)))
 	if err != nil {
@@ -112,9 +113,20 @@ func (sm *MysqldumpSeed) GetMetadata() (*SeedMetadata, error) {
 	}
 	lines := sm.Cmd.OutputLines(output)
 	for _, line := range lines {
+		re := regexp.MustCompile(`([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(\w-\w*\D|\w))`)
 		if strings.Contains(line, "GTID_PURGED") {
-			re := regexp.MustCompile(`'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}).*'`)
 			meta.GtidExecuted = strings.Replace(re.FindString(line), "'", "", -1)
+			if !strings.HasSuffix(line, ";") {
+				isGtidSection = true
+				continue
+			}
+		}
+		if isGtidSection {
+			meta.GtidExecuted += strings.Trim(strings.Replace(re.FindString(line), "'", "", -1), "'")
+			if strings.HasSuffix(line, ";") {
+				isGtidSection = false
+				continue
+			}
 		}
 		if strings.Contains(line, "CHANGE MASTER") {
 			meta.LogFile = strings.Replace(strings.Split(strings.Split(line, ",")[0], "=")[1], "'", "", -1)

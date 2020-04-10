@@ -7,16 +7,18 @@ import (
 	"path"
 	"testing"
 
+	"github.com/github/orchestrator-agent/go/helper/cmd"
 	"github.com/github/orchestrator-agent/go/seed"
-	"github.com/openark/golib/log"
+	log "github.com/sirupsen/logrus"
 	. "gopkg.in/check.v1"
 )
 
 func init() {
-	log.SetLevel(log.DEBUG)
+	//log.SetLevel(log.DEBUG)
 }
 
 var testname = flag.String("testname", "", "test name to run")
+var cmdOpts = cmd.NewCmd(false, "", log.WithFields(log.Fields{"prefix": "CMD"}))
 
 type SeedTestSuite struct{}
 
@@ -39,6 +41,7 @@ func (s *SeedTestSuite) TestMysqldumpGetMetadataPositional(c *C) {
 
 	baseConfig := &seed.Base{
 		BackupDir: backupDir,
+		Cmd:       cmdOpts,
 	}
 	mysqldump := &seed.MysqldumpSeed{
 		Base:           baseConfig,
@@ -60,6 +63,7 @@ func (s *SeedTestSuite) TestMysqldumpGetMetadataGtid(c *C) {
 
 	baseConfig := &seed.Base{
 		BackupDir: backupDir,
+		Cmd:       cmdOpts,
 	}
 	mysqldump := &seed.MysqldumpSeed{
 		Base:           baseConfig,
@@ -75,6 +79,29 @@ func (s *SeedTestSuite) TestMysqldumpGetMetadataGtid(c *C) {
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }
 
+func (s *SeedTestSuite) TestMysqldumpGetMetadataMultipleGtid(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	backupDir := path.Join(workingDir, "../../tests/functional/mysqldump")
+
+	baseConfig := &seed.Base{
+		BackupDir: backupDir,
+		Cmd:       cmdOpts,
+	}
+	mysqldump := &seed.MysqldumpSeed{
+		Base:           baseConfig,
+		BackupFileName: "orchestrator_agent_backup_gtid_multiple.sql",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile:      "mysql-bin.000005",
+		LogPos:       68633362,
+		GtidExecuted: "07830cf6-6ea9-11ea-8d7f-fa163e2b6126:1-41837,39f255c7-78b5-11ea-9825-fa163e2b6126:1-6,7becc1d4-78b7-11ea-88e5-fa163ed0932c:1-6,d8c079d0-6ea9-11ea-bd93-fa163e54112f:1-6",
+	}
+	metadata, err := mysqldump.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
 func (s *SeedTestSuite) TestMysqldumpGetMetadataGtidMySQL8(c *C) {
 	workingDir, err := os.Getwd()
 	c.Assert(err, IsNil)
@@ -82,6 +109,7 @@ func (s *SeedTestSuite) TestMysqldumpGetMetadataGtidMySQL8(c *C) {
 
 	baseConfig := &seed.Base{
 		BackupDir: backupDir,
+		Cmd:       cmdOpts,
 	}
 	mysqldump := &seed.MysqldumpSeed{
 		Base:           baseConfig,
@@ -104,6 +132,7 @@ func (s *SeedTestSuite) TestMydumperGetMetadataPositional(c *C) {
 
 	baseConfig := &seed.Base{
 		BackupDir: backupDir,
+		Cmd:       cmdOpts,
 	}
 	mydumper := &seed.MydumperSeed{
 		Base:             baseConfig,
@@ -125,6 +154,7 @@ func (s *SeedTestSuite) TestMydumperGetMetadataGtid(c *C) {
 
 	baseConfig := &seed.Base{
 		BackupDir: backupDir,
+		Cmd:       cmdOpts,
 	}
 	mydumper := &seed.MydumperSeed{
 		Base:             baseConfig,
@@ -140,6 +170,29 @@ func (s *SeedTestSuite) TestMydumperGetMetadataGtid(c *C) {
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }
 
+func (s *SeedTestSuite) TestMydumperGetMetadataMultipleGtid(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	backupDir := path.Join(workingDir, "../../tests/functional/mydumper")
+
+	baseConfig := &seed.Base{
+		BackupDir: backupDir,
+		Cmd:       cmdOpts,
+	}
+	mydumper := &seed.MydumperSeed{
+		Base:             baseConfig,
+		MetadataFileName: "metadata_gtid_multiple",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile:      "mysql-bin.000017",
+		LogPos:       314,
+		GtidExecuted: "07830cf6-6ea9-11ea-8d7f-fa163e2b6126:1-41837,39f255c7-78b5-11ea-9825-fa163e2b6126:1-6,7becc1d4-78b7-11ea-88e5-fa163ed0932c:1-6,d8c079d0-6ea9-11ea-bd93-fa163e54112f:1-6",
+	}
+	metadata, err := mydumper.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
 func (s *SeedTestSuite) TestXtrabackupGetMetadataPositional(c *C) {
 	workingDir, err := os.Getwd()
 	c.Assert(err, IsNil)
@@ -147,6 +200,7 @@ func (s *SeedTestSuite) TestXtrabackupGetMetadataPositional(c *C) {
 
 	baseConfig := &seed.Base{
 		MySQLDatadir: datadir,
+		Cmd:          cmdOpts,
 	}
 	xtrabackup := &seed.XtrabackupSeed{
 		Base:             baseConfig,
@@ -168,6 +222,7 @@ func (s *SeedTestSuite) TestXtrabackupGetMetadataGtid(c *C) {
 
 	baseConfig := &seed.Base{
 		MySQLDatadir: datadir,
+		Cmd:          cmdOpts,
 	}
 	xtrabackup := &seed.XtrabackupSeed{
 		Base:             baseConfig,
@@ -183,6 +238,29 @@ func (s *SeedTestSuite) TestXtrabackupGetMetadataGtid(c *C) {
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }
 
+func (s *SeedTestSuite) TestXtrabackupGetMetadataMultipleGtid(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	datadir := path.Join(workingDir, "../../tests/functional/xtrabackup")
+
+	baseConfig := &seed.Base{
+		MySQLDatadir: datadir,
+		Cmd:          cmdOpts,
+	}
+	xtrabackup := &seed.XtrabackupSeed{
+		Base:             baseConfig,
+		MetadataFileName: "xtrabackup_binlog_info_multiple_gtids",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile:      "mysql-bin.000017",
+		LogPos:       314,
+		GtidExecuted: "07830cf6-6ea9-11ea-8d7f-fa163e2b6126:1-41837,39f255c7-78b5-11ea-9825-fa163e2b6126:1-6,7becc1d4-78b7-11ea-88e5-fa163ed0932c:1-6,d8c079d0-6ea9-11ea-bd93-fa163e54112f:1-6",
+	}
+	metadata, err := xtrabackup.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
 func (s *SeedTestSuite) TestLVMGetMetadataPositional(c *C) {
 	workingDir, err := os.Getwd()
 	c.Assert(err, IsNil)
@@ -190,6 +268,7 @@ func (s *SeedTestSuite) TestLVMGetMetadataPositional(c *C) {
 
 	baseConfig := &seed.Base{
 		MySQLDatadir: datadir,
+		Cmd:          cmdOpts,
 	}
 	lvm := &seed.LVMSeed{
 		Base:             baseConfig,
@@ -204,13 +283,14 @@ func (s *SeedTestSuite) TestLVMGetMetadataPositional(c *C) {
 	c.Assert(metadata, DeepEquals, seedMetadata)
 }
 
-func (s *SeedTestSuite) TestLVMGetMetadataGtidl(c *C) {
+func (s *SeedTestSuite) TestLVMGetMetadataGtid(c *C) {
 	workingDir, err := os.Getwd()
 	c.Assert(err, IsNil)
 	datadir := path.Join(workingDir, "../../tests/functional/lvm")
 
 	baseConfig := &seed.Base{
 		MySQLDatadir: datadir,
+		Cmd:          cmdOpts,
 	}
 	lvm := &seed.LVMSeed{
 		Base:             baseConfig,
@@ -220,6 +300,29 @@ func (s *SeedTestSuite) TestLVMGetMetadataGtidl(c *C) {
 		LogFile:      "mysql-bin.000009",
 		LogPos:       701,
 		GtidExecuted: "5c2bd8fc-5ee3-11ea-adf4-5254008afee6:1-741",
+	}
+	metadata, err := lvm.GetMetadata()
+	c.Assert(err, IsNil)
+	c.Assert(metadata, DeepEquals, seedMetadata)
+}
+
+func (s *SeedTestSuite) TestLVMGetMetadataMultipleGtid(c *C) {
+	workingDir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	datadir := path.Join(workingDir, "../../tests/functional/lvm")
+
+	baseConfig := &seed.Base{
+		MySQLDatadir: datadir,
+		Cmd:          cmdOpts,
+	}
+	lvm := &seed.LVMSeed{
+		Base:             baseConfig,
+		MetadataFileName: "metadata_gtid_multiple",
+	}
+	seedMetadata := &seed.SeedMetadata{
+		LogFile:      "mysql-bin.000017",
+		LogPos:       314,
+		GtidExecuted: "07830cf6-6ea9-11ea-8d7f-fa163e2b6126:1-41837,39f255c7-78b5-11ea-9825-fa163e2b6126:1-6,7becc1d4-78b7-11ea-88e5-fa163ed0932c:1-6,d8c079d0-6ea9-11ea-bd93-fa163e54112f:1-6",
 	}
 	metadata, err := lvm.GetMetadata()
 	c.Assert(err, IsNil)

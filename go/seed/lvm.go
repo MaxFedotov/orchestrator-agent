@@ -201,7 +201,7 @@ func (sm *LVMSeed) GetMetadata() (*SeedMetadata, error) {
 			}
 		}
 		if strings.Contains(line, "Executed_Gtid_Set:") {
-			meta.GtidExecuted = strings.Trim(strings.SplitAfterN(line, ":", 2)[1], " ")
+			meta.GtidExecuted = strings.Replace(strings.Trim(strings.SplitAfterN(line, ":", 2)[1], " "), "\\n", "", -1)
 			break
 		}
 	}

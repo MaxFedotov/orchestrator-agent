@@ -182,7 +182,7 @@ xtrabackup-addtional-opts = ["--parallel=4", "--compress"]
 ```
 File:mysql-bin.000009
 Position:701
-Executed_Gtid_Set:5c2bd8fc-5ee3-11ea-adf4-5254008afee6:1-741
+Executed_Gtid_Set:5c2bd8fc-5ee3-11ea-adf4-5254008afee6:1-741,39f255c7-78b5-11ea-9825-fa163e2b6126:1-6
 ```
 This file will be used later by **orchestrator** and **orchestrator-agent** in order to connect your target server as slave.  
 As a very simple example, you can use following script for creating snaphosts:  

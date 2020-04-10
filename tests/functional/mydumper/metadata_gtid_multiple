@@ -1,0 +1,10 @@
+Started dump at: 2020-04-10 18:31:20
+SHOW MASTER STATUS:
+	Log: mysql-bin.000017
+	Pos: 314
+	GTID:07830cf6-6ea9-11ea-8d7f-fa163e2b6126:1-41837,
+39f255c7-78b5-11ea-9825-fa163e2b6126:1-6,
+7becc1d4-78b7-11ea-88e5-fa163ed0932c:1-6,
+d8c079d0-6ea9-11ea-bd93-fa163e54112f:1-6
+
+Finished dump at: 2020-04-10 18:31:21
